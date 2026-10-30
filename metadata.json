@@ -1,0 +1,6 @@
+{
+  "name": "Afrodelicious",
+  "description": "Afrodelicious : Le réseau culinaire d'Afrique et des Caraïbes. Recettes authentiques, Stories vidéo, masterclasses de chefs, planification de repas et communauté gourmande.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
