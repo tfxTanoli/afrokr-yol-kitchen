@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, Sparkles, ShieldCheck, CheckCircle2, AlertCircle, ArrowLeft, KeyRound, Loader2 } from 'lucide-react';
-import { AfrodeliciousLogo } from '../AfrodeliciousLogo';
+import { AfrodeliciousEmblem } from '../AfrodeliciousLogo';
 import { ALL_WORLD_COUNTRIES, getCountryFlag } from '../../data/allWorldCountries';
 import { useAuth, PASSWORD_MIN_LENGTH } from '../../context/AuthContext';
 import { toUserMessage } from '../../lib/supabase';
@@ -106,11 +106,10 @@ export const AuthScreen: React.FC<{ recoveryMode?: boolean }> = ({ recoveryMode 
 
           {/* Brand header */}
           <div className="flex flex-col items-center justify-center text-center space-y-3 pt-1">
-            <div className="relative group">
-              <div className="absolute -inset-3 bg-gradient-to-r from-[#FF4E27]/25 via-amber-400/20 to-[#FF7849]/25 rounded-3xl blur-xl opacity-75 pointer-events-none" />
-              <div className="relative flex items-center justify-center p-3 sm:p-3.5 rounded-3xl bg-white/95 border border-orange-200/80 shadow-[0_8px_30px_rgba(255,78,39,0.12)]">
-                <AfrodeliciousLogo size="lg" showTagline variant="full" />
-              </div>
+            {/* Official logo shown large: it already carries the brand name */}
+            <div className="relative">
+              <div className="absolute -inset-3 bg-gradient-to-r from-[#FF4E27]/25 via-amber-400/20 to-[#FF7849]/25 rounded-full blur-xl opacity-75 pointer-events-none" />
+              <AfrodeliciousEmblem className="relative w-28 h-28 sm:w-32 sm:h-32 shadow-[0_8px_30px_rgba(255,78,39,0.15)]" />
             </div>
             <div className="space-y-1.5 max-w-md mx-auto pt-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100/80 border border-orange-200 text-[#FF4E27] text-[10px] font-black uppercase tracking-wider shadow-2xs">

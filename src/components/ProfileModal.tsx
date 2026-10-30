@@ -91,6 +91,9 @@ interface ProfileModalProps {
   onToggleFollow?: (userId: string, userName?: string) => void;
   onOpenShare?: (item: ShareableItem) => void;
   initialTab?: 'profile' | 'feed' | 'orders' | 'referral' | 'following' | 'auth';
+  /** Module switches controlled by administrators (feature_flags). */
+  showOrders?: boolean;
+  showReferrals?: boolean;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
@@ -112,15 +115,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   followedUserIds = [],
   onToggleFollow,
   onOpenShare,
-  initialTab
+  initialTab,
+  showOrders = true,
+  showReferrals = true
 }) => {
   if (!isOpen) return null;
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.fr;
-  const [activeTab, setActiveTab] = useState<'profile' | 'feed' | 'orders' | 'referral' | 'following' | 'auth'>(initialTab || 'profile');
+  const isTabAvailable = (tab?: string) => !((tab === 'orders' && !showOrders) || (tab === 'referral' && !showReferrals));
+  const [activeTab, setActiveTab] = useState<'profile' | 'feed' | 'orders' | 'referral' | 'following' | 'auth'>(
+    initialTab && isTabAvailable(initialTab) ? initialTab : 'profile'
+  );
 
   useEffect(() => {
-    if (isOpen && initialTab) {
+    if (isOpen && initialTab && isTabAvailable(initialTab)) {
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
@@ -438,6 +446,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <BookOpen className="w-3.5 h-3.5 text-[#00C9A7]" />
               <span>Feed de mes Recettes ({userRecipes.length})</span>
             </button>
+            {showOrders && (
             <button
               onClick={() => setActiveTab('orders')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -450,6 +459,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
               )}
             </button>
+            )}
+            {showReferrals && (
             <button
               onClick={() => setActiveTab('referral')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -459,6 +470,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <Gift className="w-3.5 h-3.5" />
               <span>Parrainage & Gains</span>
             </button>
+            )}
             <button
               onClick={() => setActiveTab('following')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -1376,7 +1388,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         )}
 
         {/* Tab 2: Order History & Driver Tips */}
-        {activeTab === 'orders' && (
+        {showOrders && activeTab === 'orders' && (
           <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
             
             {/* Header Hero Banner */}
@@ -1857,7 +1869,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           </div>
         )}
-        {activeTab === 'referral' && (
+        {showReferrals && activeTab === 'referral' && (
           <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
             {/* Hero Card */}
             <div className="p-5 rounded-3xl bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border-2 border-orange-200/80 shadow-xs space-y-4">

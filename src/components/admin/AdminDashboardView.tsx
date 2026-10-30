@@ -15,9 +15,11 @@ import {
   Utensils,
   Crown,
   ExternalLink,
-  CheckCircle2
+  CheckCircle2,
+  SlidersHorizontal
 } from 'lucide-react';
-import { Recipe, User } from '../../types';
+import { PlatformFeatureFlags, Recipe, User } from '../../types';
+import { FEATURE_FLAG_GROUPS, FEATURE_FLAG_HINTS, FEATURE_FLAG_LABELS } from '../../services/featureFlagService';
 import { AdminUserRow, fetchAllUsers, setUserRole } from '../../services/adminService';
 import { initialsAvatar } from '../../services/profileService';
 import { toUserMessage } from '../../lib/supabase';
@@ -34,9 +36,12 @@ interface AdminDashboardViewProps {
   onTogglePublishRecipe: (recipe: Recipe) => Promise<void>;
   onDeleteRecipe: (recipe: Recipe) => Promise<void>;
   onOpenAdvancedPortal: () => void;
+  /** Platform module switches (persisted in Supabase, admin-only). */
+  featureFlags: PlatformFeatureFlags;
+  onToggleFeatureFlag: (key: keyof PlatformFeatureFlags, enabled: boolean) => Promise<void>;
 }
 
-type Section = 'recipes' | 'users';
+type Section = 'recipes' | 'users' | 'modules';
 type RecipeFilter = 'all' | 'published' | 'draft';
 type RoleFilter = 'all' | 'admin' | 'user';
 
@@ -57,7 +62,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onPreviewRecipe,
   onTogglePublishRecipe,
   onDeleteRecipe,
-  onOpenAdvancedPortal
+  onOpenAdvancedPortal,
+  featureFlags,
+  onToggleFeatureFlag
 }) => {
   const [section, setSection] = useState<Section>('recipes');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -73,6 +80,22 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [recipeQuery, setRecipeQuery] = useState('');
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>('all');
   const [recipeActionId, setRecipeActionId] = useState<string | null>(null);
+
+  // Module switches
+  const [flagUpdating, setFlagUpdating] = useState<keyof PlatformFeatureFlags | null>(null);
+
+  const handleToggleFlag = async (key: keyof PlatformFeatureFlags) => {
+    const enabled = !featureFlags[key];
+    setFlagUpdating(key);
+    try {
+      await onToggleFeatureFlag(key, enabled);
+      showFeedback('success', `« ${FEATURE_FLAG_LABELS[key]} » ${enabled ? 'activé' : 'désactivé'} pour tous les utilisateurs.`);
+    } catch (error) {
+      showFeedback('error', toUserMessage(error, 'Le module n’a pas pu être modifié.'));
+    } finally {
+      setFlagUpdating(null);
+    }
+  };
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
@@ -259,6 +282,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           >
             <Users className="w-3.5 h-3.5 text-[#0F3E2E]" />
             <span>Utilisateurs ({usersStatus === 'ready' ? users.length : '…'})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection('modules')}
+            className={`py-2 px-4 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${section === 'modules' ? 'bg-white text-slate-900 shadow-sm font-black' : 'text-slate-600'}`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
+            <span>Modules</span>
           </button>
         </div>
         <button
@@ -460,6 +491,63 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               })}
             </ul>
           )}
+        </div>
+      )}
+
+      {/* ===================== MODULES ===================== */}
+      {section === 'modules' && (
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500">
+            Activez ou désactivez un module pour <strong>tous les utilisateurs</strong>. Un module désactivé disparaît des menus
+            et affiche « Module bientôt disponible » s’il est ouvert.
+          </p>
+
+          {FEATURE_FLAG_GROUPS.map(group => (
+            <div key={group.title} className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+                <span className="text-sm font-black text-slate-900">{group.title}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{group.hint}</span>
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {group.keys.map(key => {
+                  const enabled = featureFlags[key];
+                  const busy = flagUpdating === key;
+                  return (
+                    <li key={key} className="p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="block text-sm font-bold text-slate-900">{FEATURE_FLAG_LABELS[key]}</span>
+                        <span className="block text-[11px] text-slate-500">{FEATURE_FLAG_HINTS[key]}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] font-black ${enabled ? 'text-emerald-700' : 'text-slate-400'}`}>
+                          {enabled ? 'Activé' : 'Désactivé'}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={enabled}
+                          aria-label={`${enabled ? 'Désactiver' : 'Activer'} ${FEATURE_FLAG_LABELS[key]}`}
+                          disabled={busy}
+                          onClick={() => handleToggleFlag(key)}
+                          className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait ${
+                            enabled ? 'bg-emerald-500' : 'bg-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform flex items-center justify-center ${
+                              enabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          >
+                            {busy && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                          </span>
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
     </div>

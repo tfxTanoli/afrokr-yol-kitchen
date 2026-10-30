@@ -83,6 +83,10 @@ async function main() {
     const { data, error } = await anon.from('profiles').select('id');
     return Boolean(error) || data?.length === 0;
   });
+  await check('cannot read feature flags', async () => {
+    const { data, error } = await anon.from('feature_flags').select('key');
+    return Boolean(error) || data?.length === 0;
+  });
   await check('cannot call set_user_role', async () => {
     const { error } = await anon.rpc('set_user_role', { target_user_id: user.id, new_role: 'admin' });
     return Boolean(error);
@@ -173,6 +177,19 @@ async function main() {
       .upload(`recipes/test-${Date.now()}.png`, new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }), { contentType: 'image/png' });
     return Boolean(error);
   });
+  await check('reads feature flags', async () => {
+    const { data, error } = await user.client.from('feature_flags').select('key, enabled');
+    return !error && (data?.length ?? 0) > 0;
+  });
+  await check('cannot switch a feature flag', async () => {
+    const { data } = await user.client.from('feature_flags').update({ enabled: true }).eq('key', 'delivery').select('key');
+    return !data || data.length === 0;
+  });
+  await check('cannot create or delete feature flags', async () => {
+    const { error: e1 } = await user.client.from('feature_flags').insert({ key: 'hackFlag', enabled: true });
+    const { data } = await user.client.from('feature_flags').delete().eq('key', 'delivery').select('key');
+    return Boolean(e1) && (!data || data.length === 0);
+  });
   await check('role still "user" after all attempts', async () => {
     const { data } = await admin.client.from('user_roles').select('role').eq('user_id', user.id).single();
     return data?.role === 'user';
@@ -222,6 +239,17 @@ async function main() {
   await check('cannot remove own admin role (lock-out protection)', async () => {
     const { error } = await admin.client.rpc('set_user_role', { target_user_id: admin.id, new_role: 'user' });
     return Boolean(error);
+  });
+  await check('switches a feature flag (restored afterwards, updated_by recorded)', async () => {
+    const { data: before } = await admin.client.from('feature_flags').select('enabled').eq('key', 'stories').single();
+    const { data: changed, error } = await admin.client
+      .from('feature_flags')
+      .update({ enabled: !before!.enabled })
+      .eq('key', 'stories')
+      .select('enabled, updated_by')
+      .single();
+    await admin.client.from('feature_flags').update({ enabled: before!.enabled }).eq('key', 'stories');
+    return !error && changed?.enabled === !before!.enabled && changed.updated_by === admin.id;
   });
   await check('deletes a recipe', async () => {
     const { data } = await admin.client.from('recipes').delete().eq('id', draft.id).select('id');

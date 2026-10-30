@@ -42,12 +42,35 @@ import { ShareModal, ShareableItem } from './components/ShareModal';
 import { AfrodeliciousLogo } from './components/AfrodeliciousLogo';
 import { SupportedLanguage } from './i18n/translations';
 import { PlatformFeatureFlags } from './types';
-import { INITIAL_FEATURE_FLAGS } from './data/adminData';
+import { FEATURE_FLAG_DEFAULTS, FEATURE_FLAG_LABELS, fetchFeatureFlags, setAllFeatureFlags, setFeatureFlag } from './services/featureFlagService';
 import { Heart, MessageSquare, GraduationCap, X, ArrowRight, DollarSign, Crown, Award, Camera, Sparkles, Bookmark as BookmarkIcon, Utensils, Truck, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { profileToUser, ProfileUpdate } from './services/profileService';
 import { createRecipe, deleteRecipe, fetchRecipes, RecipeInput, setRecipePublished, updateRecipe } from './services/recipeService';
 import { toUserMessage } from './lib/supabase';
+
+// Tabs that belong to a module an administrator can switch off (feature_flags)
+const TAB_FLAGS: Partial<Record<string, keyof PlatformFeatureFlags>> = {
+  delivery: 'delivery',
+  recommended: 'recommended',
+  experiences: 'experiences',
+  masterclasses: 'masterclasses',
+  saved: 'savedRecipes',
+  planner: 'planner',
+  list: 'grocery'
+};
+
+const FOOTER_LINKS: { tab: string; label: string; className?: string }[] = [
+  { tab: 'feed', label: 'Homepage & Stories' },
+  { tab: 'explore', label: 'Explore' },
+  { tab: 'delivery', label: 'Delivery Food' },
+  { tab: 'recommended', label: '⭐ Restaurants Recommandés', className: 'text-amber-600 font-bold' },
+  { tab: 'experiences', label: 'Expériences' },
+  { tab: 'masterclasses', label: 'Masterclasses' },
+  { tab: 'saved', label: 'Saved' },
+  { tab: 'planner', label: 'Planner' },
+  { tab: 'list', label: 'List' }
+];
 
 export default function App() {
   const { profile, role, isAdmin, signOut, updateProfile } = useAuth();
@@ -148,41 +171,56 @@ export default function App() {
   const [experiences, setExperiences] = useState<CulinaryExperience[]>(INITIAL_EXPERIENCES);
   const [deliveryRestaurants, setDeliveryRestaurants] = useState<RestaurantStore[]>(INITIAL_RESTAURANTS);
   const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>(INITIAL_ORDERS);
-  const [featureFlags, setFeatureFlags] = useState<PlatformFeatureFlags>(INITIAL_FEATURE_FLAGS);
+  // Module switches are stored in Supabase (`feature_flags`): everyone reads them, only admins change them
+  const [featureFlags, setFeatureFlags] = useState<PlatformFeatureFlags>(FEATURE_FLAG_DEFAULTS);
 
-  const handleToggleFeatureFlag = (featureId: keyof PlatformFeatureFlags, enabled: boolean) => {
-    setFeatureFlags(prev => ({
-      ...prev,
-      [featureId]: enabled
-    }));
-    pushNotification({
-      id: `flag-${Date.now()}`,
-      type: 'system',
-      title: `Fonctionnalité ${enabled ? 'Activée' : 'Désactivée'} ⚙️`,
-      message: `Le module "${featureId}" a été ${enabled ? 'activé' : 'désactivé'} en direct par l'Administrateur.`,
-      actorName: 'Super Admin',
-      actorAvatar: currentUser.avatar,
-      createdAt: "À l'instant",
-      isRead: false
-    });
+  const loadFeatureFlags = useCallback(async () => {
+    try {
+      setFeatureFlags(await fetchFeatureFlags());
+    } catch {
+      // Keep the current (safe) values; disabled modules stay hidden
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeatureFlags();
+    // Pick up an administrator's changes when the user comes back to the tab
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadFeatureFlags();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loadFeatureFlags]);
+
+  const handleToggleFeatureFlag = async (featureId: keyof PlatformFeatureFlags, enabled: boolean) => {
+    const previous = featureFlags[featureId];
+    setFeatureFlags(prev => ({ ...prev, [featureId]: enabled }));
+    try {
+      await setFeatureFlag(featureId, enabled);
+      notifySystem(
+        `Module ${enabled ? 'activé' : 'désactivé'} ⚙️`,
+        `« ${FEATURE_FLAG_LABELS[featureId]} » est maintenant ${enabled ? 'visible' : 'masqué'} pour tous les utilisateurs.`
+      );
+    } catch (error) {
+      setFeatureFlags(prev => ({ ...prev, [featureId]: previous }));
+      notifySystem('Modification impossible', toUserMessage(error, 'Le module n’a pas pu être modifié.'));
+      throw error;
+    }
   };
 
-  const handleResetFeatureFlags = () => {
-    const allOn = Object.keys(INITIAL_FEATURE_FLAGS).reduce((acc, k) => {
-      acc[k as keyof PlatformFeatureFlags] = true;
-      return acc;
-    }, {} as PlatformFeatureFlags);
-    setFeatureFlags(allOn);
-    pushNotification({
-      id: `flag-reset-${Date.now()}`,
-      type: 'system',
-      title: 'Toutes les fonctionnalités activées ✓',
-      message: 'L\'ensemble des 13 modules de la plateforme Afrodelicious est opérationnel.',
-      actorName: 'Super Admin',
-      actorAvatar: currentUser.avatar,
-      createdAt: "À l'instant",
-      isRead: false
-    });
+  const handleResetFeatureFlags = async () => {
+    try {
+      await setAllFeatureFlags(true);
+      await loadFeatureFlags();
+      notifySystem('Tous les modules activés ✓', 'L’ensemble des modules de la plateforme est visible pour tous les utilisateurs.');
+    } catch (error) {
+      notifySystem('Modification impossible', toUserMessage(error, 'Les modules n’ont pas pu être modifiés.'));
+    }
+  };
+
+  const isTabEnabled = (tab: string) => {
+    const flag = TAB_FLAGS[tab];
+    return !flag || featureFlags[flag] !== false;
   };
 
   // Modals & Drawers
@@ -819,12 +857,12 @@ export default function App() {
           setProfileInitialTab(tab || 'profile');
           setIsProfileOpen(true);
         }}
-        onOpenCreateStory={() => setIsCreateStoryOpen(true)}
+        onOpenCreateStory={featureFlags.stories ? () => setIsCreateStoryOpen(true) : undefined}
         onOpenAdminDashboard={isAdmin ? () => setActiveTab('admin') : undefined}
         onOpenOnboarding={() => setIsOnboardingOpen(true)}
         onOpenCreateRecipe={openCreateRecipe}
         onOpenImportUrl={openImportUrl}
-        onOpenScanPhoto={() => setIsFoodCameraOpen(true)}
+        onOpenScanPhoto={featureFlags.foodCamera ? () => setIsFoodCameraOpen(true) : undefined}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         language={language}
@@ -882,6 +920,34 @@ export default function App() {
           </div>
         )}
 
+        {['experiences', 'masterclasses', 'saved', 'planner', 'list'].includes(activeTab) && !isTabEnabled(activeTab) && (
+          <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
+            <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-md">
+              <Sparkles className="w-8 h-8" />
+            </div>
+            <h2 className="font-serif font-black text-2xl text-slate-900">Module bientôt disponible</h2>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Ce module a été mis en pause par l'Administrateur de la plateforme.
+            </p>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => setActiveTab('feed')}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-black"
+              >
+                Retour à l'accueil
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setActiveTab('admin')}
+                  className="px-4 py-2 rounded-xl bg-[#FF4E27] text-white text-xs font-bold hover:bg-[#E03814]"
+                >
+                  Ouvrir l'Admin
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Admin dashboard page (only ever rendered for administrators) */}
         {activeTab === 'admin' && isAdmin && (
           <AdminDashboardView
@@ -895,6 +961,8 @@ export default function App() {
             onTogglePublishRecipe={handleTogglePublishRecipe}
             onDeleteRecipe={handleDeleteRecipe}
             onOpenAdvancedPortal={() => setIsAdminDashboardOpen(true)}
+            featureFlags={featureFlags}
+            onToggleFeatureFlag={handleToggleFeatureFlag}
           />
         )}
 
@@ -903,8 +971,9 @@ export default function App() {
             recipes={recipes}
             currentUser={currentUser}
             stories={stories}
+            showStories={featureFlags.stories}
             onOpenStory={handleOpenStory}
-            onOpenCreateStory={() => setIsCreateStoryOpen(true)}
+            onOpenCreateStory={featureFlags.stories ? () => setIsCreateStoryOpen(true) : undefined}
             onSelectRecipe={(id) => setSelectedRecipeId(id)}
             onToggleLike={handleToggleLike}
             onToggleBookmark={handleToggleBookmark}
@@ -915,7 +984,7 @@ export default function App() {
             }}
             onOpenCreateRecipe={openCreateRecipe}
             onOpenImportUrl={openImportUrl}
-            onOpenScanPhoto={() => setIsFoodCameraOpen(true)}
+            onOpenScanPhoto={featureFlags.foodCamera ? () => setIsFoodCameraOpen(true) : undefined}
             followedUserIds={followedUserIds}
             onToggleFollow={handleToggleFollow}
             onOpenShare={(item) => setShareModalItem(item)}
@@ -1067,7 +1136,7 @@ export default function App() {
         )}
 
         {/* Tab: Saved Recipes View */}
-        {activeTab === 'saved' && recipesStatus === 'ready' && (
+        {activeTab === 'saved' && isTabEnabled('saved') && recipesStatus === 'ready' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-200">
               <div className="flex items-center gap-3">
@@ -1154,14 +1223,14 @@ export default function App() {
         )}
 
         {/* Tab: Dedicated Shopping List View */}
-        {activeTab === 'list' && (
+        {activeTab === 'list' && isTabEnabled('list') && (
           <ShoppingListView
             mealPlan={mealPlan}
             language={language}
           />
         )}
 
-        {activeTab === 'experiences' && (
+        {activeTab === 'experiences' && isTabEnabled('experiences') && (
           <ExperiencesView
             experiences={experiences}
             currentUser={currentUser}
@@ -1174,7 +1243,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'masterclasses' && (
+        {activeTab === 'masterclasses' && isTabEnabled('masterclasses') && (
           <MasterclassesView
             courses={courses}
             currentUser={currentUser}
@@ -1199,7 +1268,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'planner' && (
+        {activeTab === 'planner' && isTabEnabled('planner') && (
           <MealPlannerView
             mealPlan={mealPlan}
             allRecipes={recipes}
@@ -1241,8 +1310,8 @@ export default function App() {
       <SamsungFoodFab
         onCreateRecipe={openCreateRecipe}
         onImportUrl={openImportUrl}
-        onScanPhoto={() => setIsFoodCameraOpen(true)}
-        onOpenCreateStory={() => setIsCreateStoryOpen(true)}
+        onScanPhoto={featureFlags.foodCamera ? () => setIsFoodCameraOpen(true) : undefined}
+        onOpenCreateStory={featureFlags.stories ? () => setIsCreateStoryOpen(true) : undefined}
       />
 
       {/* Modern High-End Footer */}
@@ -1251,23 +1320,12 @@ export default function App() {
           <AfrodeliciousLogo size="md" showTagline />
         </div>
         <div className="flex flex-wrap items-center justify-center gap-6 font-semibold text-slate-700">
-          <button onClick={() => setActiveTab('feed')} className="hover:text-[#FF4E27] transition-colors">Homepage & Stories</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('explore')} className="hover:text-[#FF4E27] transition-colors">Explore</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('delivery')} className="hover:text-[#FF4E27] transition-colors">Delivery Food</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('recommended')} className="hover:text-[#FF4E27] transition-colors text-amber-600 font-bold">⭐ Restaurants Recommandés</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('experiences')} className="hover:text-[#FF4E27] transition-colors">Expériences</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('masterclasses')} className="hover:text-[#FF4E27] transition-colors">Masterclasses</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('saved')} className="hover:text-[#FF4E27] transition-colors">Saved</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('planner')} className="hover:text-[#FF4E27] transition-colors">Planner</button>
-          <span>·</span>
-          <button onClick={() => setActiveTab('list')} className="hover:text-[#FF4E27] transition-colors">List</button>
+          {FOOTER_LINKS.filter(link => isTabEnabled(link.tab)).map((link, idx) => (
+            <React.Fragment key={link.tab}>
+              {idx > 0 && <span>·</span>}
+              <button onClick={() => setActiveTab(link.tab)} className={`hover:text-[#FF4E27] transition-colors ${link.className ?? ''}`}>{link.label}</button>
+            </React.Fragment>
+          ))}
           {isAdmin && (
             <>
               <span>·</span>
@@ -1351,7 +1409,7 @@ export default function App() {
       )}
 
       <FoodCameraModal
-        isOpen={isFoodCameraOpen}
+        isOpen={isFoodCameraOpen && featureFlags.foodCamera}
         onClose={() => setIsFoodCameraOpen(false)}
         onSelectRecipe={(id) => setSelectedRecipeId(id)}
       />
@@ -1368,6 +1426,8 @@ export default function App() {
           onClose={() => setIsProfileOpen(false)}
           currentUser={currentUser}
           initialTab={profileInitialTab}
+          showOrders={featureFlags.delivery}
+          showReferrals={featureFlags.referrals}
           onUpdateCurrentUser={handleUpdateUser}
           onSaveProfile={handleSaveProfile}
           onSignOut={handleSignOut}
@@ -1433,7 +1493,10 @@ export default function App() {
           deliveryOrders={deliveryOrders}
           deliveryRestaurants={deliveryRestaurants}
           featureFlags={featureFlags}
-          onToggleFeatureFlag={handleToggleFeatureFlag}
+          onToggleFeatureFlag={(key, enabled) => {
+            // Failure is already reported by a notification
+            handleToggleFeatureFlag(key, enabled).catch(() => {});
+          }}
           onResetFeatureFlags={handleResetFeatureFlags}
           onNavigateToTab={(tabId) => setActiveTab(tabId)}
           onOpenCreateRecipe={openCreateRecipe}

@@ -12,7 +12,8 @@ import {
 interface SamsungFoodFabProps {
   onCreateRecipe: () => void;
   onImportUrl: () => void;
-  onScanPhoto: () => void;
+  /** Omitted when the AI photo-scan module is switched off by an administrator. */
+  onScanPhoto?: () => void;
   onOpenCreateStory?: () => void;
 }
 
@@ -72,7 +73,7 @@ export const SamsungFoodFab: React.FC<SamsungFoodFabProps> = ({
       accentBg: 'bg-orange-50 text-[#FF7849]',
       onClick: () => {
         setIsOpen(false);
-        onScanPhoto();
+        onScanPhoto?.();
       },
     },
     {
@@ -116,7 +117,7 @@ export const SamsungFoodFab: React.FC<SamsungFoodFabProps> = ({
             animate="open"
             exit="closed"
           >
-            {actionButtons.map((item, index) => {
+            {actionButtons.filter(item => item.id !== 'camera' || onScanPhoto).map((item, index) => {
               const Icon = item.icon;
               // Stagger delay based on distance to the FAB (create comes out first, then camera, then import)
               // index 2 is 'create' (bottom-most, closest to FAB), index 0 is 'import' (top)

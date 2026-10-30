@@ -32,8 +32,11 @@ Schema, policies and storage live in [supabase/migrations/](supabase/migrations/
 | `user_roles` | `user` or `admin`, one per user. Always `user` at sign-up. | Users read their own role. **No one can write directly**; changes go through `set_user_role()` (admins only, cannot demote themselves). |
 | `recipes` | Recipes (`ingredients` / `instructions` as JSON arrays), `is_published` flag. | Signed-in users read **published** recipes. Admins read all and create/update/delete/publish. |
 | Storage `recipe-images` | Recipe photos (JPEG/PNG/WebP, 5 MB max). | Public read; upload/delete by admins only. |
+| `feature_flags` | On/off switch per app module (delivery, restaurants, AI photo scan, masterclasses, stories…). Delivery- and AI-related modules ship **off**. | Signed-in users read them (the UI hides disabled modules). Only admins can change `enabled`, from **Admin Dashboard → Modules**. |
 
 Anonymous visitors have no access to any table; the whole app sits behind sign-in.
+
+Brand assets (official logo, favicons) live in [public/brand/](public/brand/); `afrodelicious-logo-original.jpg` is the file supplied by the client.
 
 ### Make someone an administrator
 
@@ -50,7 +53,7 @@ After that, admins can promote/demote other users from **Dashboard Admin → Use
 
 - `npm run db:seed`: upserts the original 6 recipes (and uploads their photos) as an admin account.
   Needs `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`.
-- `npm run test:security`: 32 end-to-end authorization checks (anonymous / member / admin) against the live project.
+- `npm run test:security`: 37 end-to-end authorization checks (anonymous / member / admin) against the live project.
   Needs `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`, `TEST_USER_EMAIL`, `TEST_USER_PASSWORD` (a non-admin account).
 
 ## Deployment (Vercel)
