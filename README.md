@@ -53,10 +53,22 @@ After that, admins can promote/demote other users from **Dashboard Admin → Use
 - `npm run test:security`: 32 end-to-end authorization checks (anonymous / member / admin) against the live project.
   Needs `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`, `TEST_USER_EMAIL`, `TEST_USER_PASSWORD` (a non-admin account).
 
+## Deployment (Vercel)
+
+Production: https://afrokr-yol-kitchen.vercel.app (Vercel project linked to this repo; every push to `main` deploys).
+
+- Vercel installs with Bun (`bun.lock`) and builds with `vite build`.
+- Environment variables (Production + Preview): `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_GOOGLE_MAPS_API_KEY`.
+  They are baked in at build time, so redeploy after changing them.
+- Supabase **Authentication → URL Configuration** is set to:
+  - Site URL: `https://afrokr-yol-kitchen.vercel.app`
+  - Redirect URLs: `https://afrokr-yol-kitchen.vercel.app/**`, `https://afrokr-yol-kitchen-*.vercel.app/**` (preview deployments),
+    `http://localhost:3000/**`, `http://127.0.0.1:3000/**`
+
+  If the app moves to a custom domain, add it to both settings.
+
 ### Supabase dashboard settings to review before launch
 
-- **Authentication → URL Configuration**: set *Site URL* to the production URL and add it to *Redirect URLs*
-  (password-reset links redirect there; `http://localhost:3000/**` is currently allowed for development).
 - **Authentication → SMTP**: configure a custom SMTP provider. Supabase's built-in mailer only delivers to
   project team members and is limited to a few emails per hour, so password-reset emails will not reach real users without it.
 - **Authentication → Email**: "Confirm email" is currently **off** (users are signed in right after registering). Turn it on

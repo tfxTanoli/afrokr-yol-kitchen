@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { INITIAL_RECIPES } from '../src/data/initialData';
@@ -32,13 +33,14 @@ const supabase = createClient<Database>(url, key, { auth: { persistSession: fals
 const BUCKET = 'recipe-images';
 const uploaded = new Map<string, string>();
 
-/** Uploads a bundled `/src/assets/...` image to Storage and returns its public URL. */
+/** Uploads a bundled local image (file:// URL or `/src/assets/...`) to Storage and returns its public URL. */
 async function toPublicUrl(src: string | undefined): Promise<string | null> {
   if (!src) return null;
-  if (!src.startsWith('/src/assets/')) return src;
+  const isLocal = src.startsWith('file:') || src.startsWith('/src/assets/');
+  if (!isLocal) return src;
   if (uploaded.has(src)) return uploaded.get(src)!;
 
-  const filePath = path.join(process.cwd(), src);
+  const filePath = src.startsWith('file:') ? fileURLToPath(src) : path.join(process.cwd(), src);
   const objectPath = `seed/${path.basename(src)}`;
   const contentType = src.endsWith('.png') ? 'image/png' : 'image/jpeg';
   const { error } = await supabase.storage
