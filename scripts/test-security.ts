@@ -6,7 +6,7 @@
  *   TEST_ADMIN_EMAIL=... TEST_ADMIN_PASSWORD=... \
  *   TEST_USER_EMAIL=...  TEST_USER_PASSWORD=...  npx tsx scripts/test-security.ts
  *
- * Creates and removes its own temporary draft recipe and image.
+ * Creates and removes its own temporary draft recipe, image, likes, bookmarks and comments.
  */
 import dotenv from 'dotenv';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -89,6 +89,18 @@ async function main() {
   });
   await check('cannot call set_user_role', async () => {
     const { error } = await anon.rpc('set_user_role', { target_user_id: user.id, new_role: 'admin' });
+    return Boolean(error);
+  });
+  await check('cannot read likes, bookmarks or comments', async () => {
+    const results = await Promise.all([
+      anon.from('recipe_likes').select('recipe_id'),
+      anon.from('recipe_bookmarks').select('recipe_id'),
+      anon.from('recipe_comments').select('id')
+    ]);
+    return results.every(r => Boolean(r.error) || r.data?.length === 0);
+  });
+  await check('cannot call recipe_social_counts', async () => {
+    const { error } = await anon.rpc('recipe_social_counts');
     return Boolean(error);
   });
 
@@ -190,6 +202,105 @@ async function main() {
     const { data } = await user.client.from('feature_flags').delete().eq('key', 'delivery').select('key');
     return Boolean(e1) && (!data || data.length === 0);
   });
+  // Social fixtures on the published recipe, owned by the admin (a like the admin already had is kept)
+  const { data: adminLikedBefore } = await admin.client.from('recipe_likes').select('recipe_id').eq('recipe_id', published!.id).eq('user_id', admin.id);
+  await admin.client.from('recipe_likes').upsert({ recipe_id: published!.id, user_id: admin.id }, { ignoreDuplicates: true });
+  const { data: adminComment } = await admin.client
+    .from('recipe_comments')
+    .insert({ recipe_id: published!.id, user_id: admin.id, body: 'Commentaire admin (test sécurité)' })
+    .select('id')
+    .single();
+  const { data: draftComment } = await admin.client
+    .from('recipe_comments')
+    .insert({ recipe_id: draft.id, user_id: admin.id, body: 'Commentaire sur brouillon (test sécurité)' })
+    .select('id')
+    .single();
+  const likeCount = async () => {
+    const { data } = await user.client.rpc('recipe_social_counts');
+    return Number(data?.find(c => c.recipe_id === published!.id)?.likes_count ?? -1);
+  };
+
+  await check('likes then unlikes a published recipe (counter follows)', async () => {
+    const before = await likeCount();
+    const { error } = await user.client.from('recipe_likes').insert({ recipe_id: published!.id, user_id: user.id });
+    const during = await likeCount();
+    const { data: removed } = await user.client.from('recipe_likes').delete().eq('recipe_id', published!.id).eq('user_id', user.id).select('recipe_id');
+    const after = await likeCount();
+    return !error && during === before + 1 && removed?.length === 1 && after === before;
+  });
+  await check('sees only own likes', async () => {
+    const { data, error } = await user.client.from('recipe_likes').select('user_id');
+    return !error && data.every(l => l.user_id === user.id);
+  });
+  await check('cannot like on behalf of another user', async () => {
+    const { error } = await user.client.from('recipe_likes').insert({ recipe_id: published!.id, user_id: admin.id });
+    return Boolean(error);
+  });
+  await check('cannot remove another user\'s like', async () => {
+    const { data } = await user.client.from('recipe_likes').delete().eq('recipe_id', published!.id).eq('user_id', admin.id).select('recipe_id');
+    return !data || data.length === 0;
+  });
+  await check('cannot like a draft', async () => {
+    const { error } = await user.client.from('recipe_likes').insert({ recipe_id: draft.id, user_id: user.id });
+    return Boolean(error);
+  });
+  await check('bookmarks then removes a published recipe', async () => {
+    const { error } = await user.client.from('recipe_bookmarks').insert({ recipe_id: published!.id, user_id: user.id });
+    const { data: mine } = await user.client.from('recipe_bookmarks').select('recipe_id').eq('recipe_id', published!.id);
+    const { data: removed } = await user.client.from('recipe_bookmarks').delete().eq('recipe_id', published!.id).eq('user_id', user.id).select('recipe_id');
+    return !error && mine?.length === 1 && removed?.length === 1;
+  });
+  await check('cannot bookmark for another user or a draft', async () => {
+    const { error: e1 } = await user.client.from('recipe_bookmarks').insert({ recipe_id: published!.id, user_id: admin.id });
+    const { error: e2 } = await user.client.from('recipe_bookmarks').insert({ recipe_id: draft.id, user_id: user.id });
+    return Boolean(e1) && Boolean(e2);
+  });
+  let memberCommentId = '';
+  await check('comments a published recipe (author credit set by the database)', async () => {
+    const { data, error } = await user.client
+      .from('recipe_comments')
+      .insert({ recipe_id: published!.id, user_id: user.id, body: '  Délicieux !  ', author_name: 'Faux Chef', author_handle: '@admin' })
+      .select('*')
+      .single();
+    if (error) return error.message;
+    memberCommentId = data.id;
+    const { data: me } = await user.client.from('profiles').select('full_name, handle').eq('id', user.id).single();
+    return data.body === 'Délicieux !' && data.author_name === me?.full_name && data.author_handle === me?.handle;
+  });
+  await check('cannot comment as another user', async () => {
+    const { error } = await user.client.from('recipe_comments').insert({ recipe_id: published!.id, user_id: admin.id, body: 'Usurpation' });
+    return Boolean(error);
+  });
+  await check('cannot comment a draft or read its comments', async () => {
+    const { error } = await user.client.from('recipe_comments').insert({ recipe_id: draft.id, user_id: user.id, body: 'Brouillon' });
+    const { data } = await user.client.from('recipe_comments').select('id').eq('id', draftComment!.id);
+    return Boolean(error) && data?.length === 0;
+  });
+  await check('database rejects empty or oversized comments', async () => {
+    const { error: e1 } = await user.client.from('recipe_comments').insert({ recipe_id: published!.id, user_id: user.id, body: '   ' });
+    const { error: e2 } = await user.client.from('recipe_comments').insert({ recipe_id: published!.id, user_id: user.id, body: 'x'.repeat(1001) });
+    return Boolean(e1) && Boolean(e2);
+  });
+  await check('reads other users\' comments on published recipes', async () => {
+    const { data } = await user.client.from('recipe_comments').select('id').eq('id', adminComment!.id);
+    return data?.length === 1;
+  });
+  await check('cannot edit a comment', async () => {
+    const { data, error } = await user.client.from('recipe_comments').update({ body: 'Modifié' }).eq('id', memberCommentId).select('id');
+    return Boolean(error) || !data || data.length === 0;
+  });
+  await check('cannot delete another user\'s comment', async () => {
+    const { data } = await user.client.from('recipe_comments').delete().eq('id', adminComment!.id).select('id');
+    return !data || data.length === 0;
+  });
+  await check('deletes own comment', async () => {
+    const { data } = await user.client.from('recipe_comments').delete().eq('id', memberCommentId).select('id');
+    return data?.length === 1;
+  });
+  await check('social counters hide drafts', async () => {
+    const { data, error } = await user.client.rpc('recipe_social_counts');
+    return !error && !data.some(c => c.recipe_id === draft.id);
+  });
   await check('role still "user" after all attempts', async () => {
     const { data } = await admin.client.from('user_roles').select('role').eq('user_id', user.id).single();
     return data?.role === 'user';
@@ -251,10 +362,25 @@ async function main() {
     await admin.client.from('feature_flags').update({ enabled: before!.enabled }).eq('key', 'stories');
     return !error && changed?.enabled === !before!.enabled && changed.updated_by === admin.id;
   });
+  await check('deletes a member\'s comment (moderation)', async () => {
+    const { data: c } = await user.client
+      .from('recipe_comments')
+      .insert({ recipe_id: published!.id, user_id: user.id, body: 'À modérer' })
+      .select('id')
+      .single();
+    const { data } = await admin.client.from('recipe_comments').delete().eq('id', c!.id).select('id');
+    return data?.length === 1;
+  });
   await check('deletes a recipe', async () => {
     const { data } = await admin.client.from('recipes').delete().eq('id', draft.id).select('id');
     return data?.length === 1;
   });
+
+  // Remove the social fixtures left on the published recipe
+  await admin.client.from('recipe_comments').delete().eq('id', adminComment!.id);
+  if (!adminLikedBefore?.length) {
+    await admin.client.from('recipe_likes').delete().eq('recipe_id', published!.id).eq('user_id', admin.id);
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   await admin.client.auth.signOut();

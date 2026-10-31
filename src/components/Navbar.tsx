@@ -209,11 +209,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="cursor-pointer shrink-0 transition-transform active:scale-95 flex items-center"
               title="Afrodelicious - Accueil"
             >
-              <AfrodeliciousLogo size="md" showTagline />
+              {/* Phones: the round logo alone (it already carries the brand name) */}
+              <AfrodeliciousLogo variant="emblem" size="md" className="sm:hidden" />
+              <AfrodeliciousLogo size="md" showTagline className="hidden sm:flex" />
             </div>
 
             {/* Center: Global Search Bar with Search History */}
-            <div className="flex-1 max-w-xs sm:max-w-md mx-2 sm:mx-6 relative" ref={searchContainerRef}>
+            <div className="flex-1 min-w-0 max-w-xs sm:max-w-md mx-0.5 sm:mx-6 relative" ref={searchContainerRef}>
               <div className="relative w-full">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
@@ -260,7 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Dropdown: Recent Searches & Suggestions */}
               {isSearchDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2.5 px-3 z-50 text-slate-800 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="fixed sm:absolute left-3 right-3 top-[3.75rem] sm:top-full sm:left-auto sm:right-0 sm:w-80 lg:left-0 lg:w-auto sm:mt-2bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2.5 px-3 z-50 text-slate-800 animate-in fade-in slide-in-from-top-1 duration-150">
                   {/* Recent Searches Header */}
                   <div className="flex items-center justify-between px-1.5 pb-2 border-b border-slate-100">
                     <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -360,14 +362,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Right: The 4 Core Harmonized Controls (Langue, Notification, Profil, Bouton à 3 traits) */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
               
               {/* 1. Bouton Langue */}
               <div className="relative" ref={langRef}>
                 <button
                   type="button"
                   onClick={() => setLangDropdownOpen(!langDropdownOpen)}
-                  className={`h-10 sm:h-11 px-2.5 sm:px-3 rounded-2xl border transition-all duration-200 shadow-2xs hover:shadow-xs flex items-center gap-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30 ${
+                  className={`h-10 sm:h-11 px-2 sm:px-3 rounded-2xl border transition-all duration-200 shadow-2xs hover:shadow-xs flex items-center gap-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30 ${
                     langDropdownOpen 
                       ? 'border-[#FF4E27] bg-orange-50 text-[#FF4E27]' 
                       : 'border-slate-200/90 bg-white hover:bg-slate-50 text-slate-700'
@@ -379,7 +381,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="uppercase text-[11px] font-black tracking-wider font-mono hidden sm:inline">
                     {currentLangObj.code}
                   </span>
-                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${langDropdownOpen ? 'rotate-180 text-[#FF4E27]' : ''}`} />
+                  <ChevronDown className={`hidden sm:block w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${langDropdownOpen ? 'rotate-180 text-[#FF4E27]' : ''}`} />
                 </button>
 
                 {/* Dropdown Langue */}

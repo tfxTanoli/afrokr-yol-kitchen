@@ -94,6 +94,8 @@ interface ProfileModalProps {
   /** Module switches controlled by administrators (feature_flags). */
   showOrders?: boolean;
   showReferrals?: boolean;
+  /** Saves a like in the database; without it likes in the profile feed stay local. */
+  onToggleLike?: (recipeId: string) => void;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
@@ -117,7 +119,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onOpenShare,
   initialTab,
   showOrders = true,
-  showReferrals = true
+  showReferrals = true,
+  onToggleLike
 }) => {
   if (!isOpen) return null;
 
@@ -327,6 +330,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   const handleToggleFeedLike = (e: React.MouseEvent, recipeId: string, currentCount: number) => {
     e.stopPropagation();
+    if (onToggleLike) {
+      onToggleLike(recipeId);
+      return;
+    }
     const isLiked = !!likedRecipeIds[recipeId];
     setLikedRecipeIds(prev => ({ ...prev, [recipeId]: !isLiked }));
     setLocalRecipeLikes(prev => ({

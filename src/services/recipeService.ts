@@ -55,7 +55,7 @@ export function rowToRecipe(row: RecipeRow): Recipe {
     ingredients: (Array.isArray(row.ingredients) ? row.ingredients : []) as unknown as Ingredient[],
     steps: (Array.isArray(row.instructions) ? row.instructions : []) as unknown as RecipeStep[],
     heritageStory: row.heritage_story || undefined,
-    // Social interactions are outside the MVP backend scope (kept client-side).
+    // Filled in from recipe_likes / recipe_bookmarks / recipe_comments (socialService)
     likesCount: 0,
     commentsCount: 0,
     bookmarksCount: 0,

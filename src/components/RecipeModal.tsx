@@ -26,13 +26,17 @@ import {
   ArrowRight,
   Bell,
   Utensils,
-  Timer
+  Timer,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { Recipe, User } from '../types';
 import { CulinaryBadgeChip } from './CulinaryBadgeChip';
 import { getAuthorCulinaryBadge } from '../utils/badgeSystem';
 import { FollowButton } from './FollowButton';
 import { ShareableItem } from './ShareModal';
+import { toUserMessage } from '../lib/supabase';
+import { COMMENT_MAX_LENGTH } from '../services/socialService';
 
 interface RecipeModalProps {
   recipe: Recipe | null;
@@ -40,7 +44,10 @@ interface RecipeModalProps {
   currentUser: User;
   onToggleLike: (recipeId: string) => void;
   onToggleBookmark: (recipeId: string) => void;
-  onAddComment: (recipeId: string, text: string) => void;
+  onAddComment: (recipeId: string, text: string) => Promise<void> | void;
+  onDeleteComment?: (recipeId: string, commentId: string) => Promise<void>;
+  currentUserId?: string;
+  canModerateComments?: boolean;
   onAddToMealPlan: (recipe: Recipe) => void;
   followedUserIds?: string[];
   onToggleFollow?: (userId: string, userName?: string) => void;
@@ -56,6 +63,9 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
   onToggleLike,
   onToggleBookmark,
   onAddComment,
+  onDeleteComment,
+  currentUserId,
+  canModerateComments = false,
   onAddToMealPlan,
   followedUserIds = [],
   onToggleFollow,
@@ -68,6 +78,9 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
   const [checkedIngredients, setCheckedIngredients] = useState<Record<string, boolean>>({});
   const [expandedTipStep, setExpandedTipStep] = useState<number | null>(null);
   const [newCommentText, setNewCommentText] = useState('');
+  const [isPostingComment, setIsPostingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [planAddedFeedback, setPlanAddedFeedback] = useState(false);
   const [groceryAddedFeedback, setGroceryAddedFeedback] = useState(false);
   const [copiedLinkFeedback, setCopiedLinkFeedback] = useState(false);
@@ -168,11 +181,33 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
     setCheckedIngredients(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handlePostComment = (e: React.FormEvent) => {
+  const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommentText.trim()) return;
-    onAddComment(recipe.id, newCommentText.trim());
-    setNewCommentText('');
+    if (!newCommentText.trim() || isPostingComment) return;
+    setIsPostingComment(true);
+    setCommentError(null);
+    try {
+      await onAddComment(recipe.id, newCommentText.trim());
+      setNewCommentText('');
+    } catch (error) {
+      setCommentError(toUserMessage(error, 'Votre commentaire n’a pas pu être publié.'));
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!onDeleteComment || deletingCommentId) return;
+    if (!window.confirm('Supprimer ce commentaire ?')) return;
+    setDeletingCommentId(commentId);
+    setCommentError(null);
+    try {
+      await onDeleteComment(recipe.id, commentId);
+    } catch (error) {
+      setCommentError(toUserMessage(error, 'Le commentaire n’a pas pu être supprimé.'));
+    } finally {
+      setDeletingCommentId(null);
+    }
   };
 
   const handleAddToPlanClick = () => {
@@ -477,7 +512,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Avis ({recipe.comments.length})
+              Avis ({recipe.commentsCount})
             </button>
           </div>
 
@@ -690,16 +725,24 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                   value={newCommentText}
                   onChange={(e) => setNewCommentText(e.target.value)}
                   placeholder="Posez une question au chef ou partagez votre avis..."
+                  maxLength={COMMENT_MAX_LENGTH}
+                  disabled={isPostingComment}
                   className="flex-1 px-4 py-2.5 rounded-2xl border border-slate-200 text-xs focus:border-[#00C9A7] focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2.5 rounded-2xl bg-[#00C9A7] hover:bg-[#00b093] text-slate-950 text-xs font-black shadow-xs flex items-center gap-1 transition-all"
+                  disabled={isPostingComment || !newCommentText.trim()}
+                  className="px-4 py-2.5 rounded-2xl bg-[#00C9A7] hover:bg-[#00b093] text-slate-950 text-xs font-black shadow-xs flex items-center gap-1 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  {isPostingComment ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   <span>Envoyer</span>
                 </button>
               </form>
+              {commentError && (
+                <p role="alert" className="text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                  {commentError}
+                </p>
+              )}
 
               {/* Comments list */}
               <div className="space-y-2.5">
@@ -721,9 +764,23 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                             <span className="text-xs font-bold text-slate-900">{c.userName}</span>
                             <CulinaryBadgeChip badge={getAuthorCulinaryBadge(c.userName, c.userId)} size="xs" />
                           </div>
-                          <span className="text-[10px] text-slate-400 font-medium">{c.createdAt}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] text-slate-400 font-medium">{c.createdAt}</span>
+                            {onDeleteComment && (c.userId === currentUserId || canModerateComments) && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteComment(c.id)}
+                                disabled={deletingCommentId === c.id}
+                                title="Supprimer le commentaire"
+                                aria-label="Supprimer le commentaire"
+                                className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                              >
+                                {deletingCommentId === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1 font-normal leading-relaxed">{c.text}</p>
+                        <p className="text-xs text-slate-600 mt-1 font-normal leading-relaxed break-words whitespace-pre-line">{c.text}</p>
                       </div>
                     </div>
                   ))

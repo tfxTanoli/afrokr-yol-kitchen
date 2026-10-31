@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   INITIAL_CURRENT_USER,
   INITIAL_COURSES,
@@ -47,6 +47,7 @@ import { Heart, MessageSquare, GraduationCap, X, ArrowRight, DollarSign, Crown, 
 import { useAuth } from './context/AuthContext';
 import { profileToUser, ProfileUpdate } from './services/profileService';
 import { createRecipe, deleteRecipe, fetchRecipes, RecipeInput, setRecipePublished, updateRecipe } from './services/recipeService';
+import { addComment, deleteComment, fetchComments, fetchSocialState, setRecipeBookmarked, setRecipeLiked } from './services/socialService';
 import { toUserMessage } from './lib/supabase';
 
 // Tabs that belong to a module an administrator can switch off (feature_flags)
@@ -146,13 +147,22 @@ export default function App() {
     setRecipesStatus(prev => (prev === 'ready' ? 'ready' : 'loading'));
     setRecipesError(null);
     try {
-      const fresh = await fetchRecipes();
-      // Keep client-side social state (likes / bookmarks) across reloads
+      const [fresh, social] = await Promise.all([
+        fetchRecipes(),
+        // Likes, bookmarks and comment counters; recipes still show if this fails
+        fetchSocialState().catch(() => null)
+      ]);
       setAllRecipes(prev => fresh.map(r => {
         const existing = prev.find(p => p.id === r.id);
-        return existing
-          ? { ...r, isLiked: existing.isLiked, likesCount: existing.likesCount, isBookmarked: existing.isBookmarked, bookmarksCount: existing.bookmarksCount, comments: existing.comments, commentsCount: existing.commentsCount }
-          : r;
+        const counts = social?.[r.id] ?? (existing && {
+          likesCount: existing.likesCount,
+          bookmarksCount: existing.bookmarksCount,
+          commentsCount: existing.commentsCount,
+          isLiked: existing.isLiked,
+          isBookmarked: existing.isBookmarked
+        });
+        // Comments already loaded for an open recipe are kept until it reloads them
+        return { ...r, ...counts, comments: existing?.comments ?? [] };
       }));
       setRecipesStatus('ready');
     } catch (error) {
@@ -452,21 +462,33 @@ export default function App() {
   };
 
   // Handlers for Social Interactions
-  const handleToggleLike = (recipeId: string) => {
-    const targetRecipe = recipes.find(r => r.id === recipeId);
-    setRecipes(prev => prev.map(r => {
-      if (r.id === recipeId) {
-        const isLiked = !r.isLiked;
-        return {
-          ...r,
-          isLiked,
-          likesCount: isLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1)
-        };
-      }
-      return r;
-    }));
+  // Likes and bookmarks are saved in Supabase; the UI updates first and rolls back on failure.
+  // One request per recipe at a time, so fast double clicks cannot leave the two out of sync.
+  const pendingSocial = useRef(new Set<string>());
 
-    if (targetRecipe && !targetRecipe.isLiked) {
+  const applyLike = (recipeId: string, isLiked: boolean) => setRecipes(prev => prev.map(r => r.id === recipeId
+    ? { ...r, isLiked, likesCount: isLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1) }
+    : r));
+
+  const applyBookmark = (recipeId: string, isBookmarked: boolean) => setRecipes(prev => prev.map(r => r.id === recipeId
+    ? { ...r, isBookmarked, bookmarksCount: isBookmarked ? r.bookmarksCount + 1 : Math.max(0, r.bookmarksCount - 1) }
+    : r));
+
+  const handleToggleLike = (recipeId: string) => {
+    const targetRecipe = allRecipes.find(r => r.id === recipeId);
+    const key = `like:${recipeId}`;
+    if (!targetRecipe || pendingSocial.current.has(key)) return;
+    const isLiked = !targetRecipe.isLiked;
+    pendingSocial.current.add(key);
+    applyLike(recipeId, isLiked);
+    setRecipeLiked(recipeId, currentUser.id, isLiked)
+      .catch(error => {
+        applyLike(recipeId, !isLiked);
+        notifySystem('J’aime non enregistré', toUserMessage(error, 'Votre j’aime n’a pas pu être enregistré.'));
+      })
+      .finally(() => pendingSocial.current.delete(key));
+
+    if (isLiked) {
       pushNotification({
         id: `notif-like-${Date.now()}`,
         type: 'like',
@@ -524,31 +546,42 @@ export default function App() {
   };
 
   const handleToggleBookmark = (recipeId: string) => {
-    setRecipes(prev => prev.map(r => {
-      if (r.id === recipeId) {
-        const isBookmarked = !r.isBookmarked;
-        return {
-          ...r,
-          isBookmarked,
-          bookmarksCount: isBookmarked ? r.bookmarksCount + 1 : Math.max(0, r.bookmarksCount - 1)
-        };
-      }
-      return r;
-    }));
+    const targetRecipe = allRecipes.find(r => r.id === recipeId);
+    const key = `bookmark:${recipeId}`;
+    if (!targetRecipe || pendingSocial.current.has(key)) return;
+    const isBookmarked = !targetRecipe.isBookmarked;
+    pendingSocial.current.add(key);
+    applyBookmark(recipeId, isBookmarked);
+    setRecipeBookmarked(recipeId, currentUser.id, isBookmarked)
+      .catch(error => {
+        applyBookmark(recipeId, !isBookmarked);
+        notifySystem('Sauvegarde impossible', toUserMessage(error, 'La recette n’a pas pu être sauvegardée.'));
+      })
+      .finally(() => pendingSocial.current.delete(key));
   };
 
-  const handleAddComment = (recipeId: string, text: string) => {
-    const targetRecipe = recipes.find(r => r.id === recipeId);
-    const newComment = {
-      id: `comment-${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userAvatar: currentUser.avatar,
-      userHandle: currentUser.handle,
-      text,
-      createdAt: "À l'instant",
-      likesCount: 0
+  // Comments of the open recipe are loaded from Supabase each time it is opened
+  const openRecipeId = activeRecipe?.id;
+  useEffect(() => {
+    if (!openRecipeId) return;
+    let cancelled = false;
+    fetchComments(openRecipeId)
+      .then(comments => {
+        if (cancelled) return;
+        setRecipes(prev => prev.map(r => r.id === openRecipeId ? { ...r, comments, commentsCount: comments.length } : r));
+      })
+      .catch(() => {
+        // Keep whatever is displayed; posting a comment still reports errors
+      });
+    return () => {
+      cancelled = true;
     };
+  }, [openRecipeId]);
+
+  // Throws on failure so the comment form keeps the text and shows the error
+  const handleAddComment = async (recipeId: string, text: string) => {
+    const targetRecipe = allRecipes.find(r => r.id === recipeId);
+    const newComment = await addComment(recipeId, currentUser.id, text);
     setRecipes(prev => prev.map(r => {
       if (r.id === recipeId) {
         return {
@@ -576,6 +609,14 @@ export default function App() {
         isRead: false
       });
     }
+  };
+
+  // Throws on failure so the comment stays visible with an error message
+  const handleDeleteComment = async (recipeId: string, commentId: string) => {
+    await deleteComment(commentId);
+    setRecipes(prev => prev.map(r => r.id === recipeId
+      ? { ...r, comments: r.comments.filter(c => c.id !== commentId), commentsCount: Math.max(0, r.commentsCount - 1) }
+      : r));
   };
 
   // ---- Recipe management (admin only; enforced again by database RLS) ----
@@ -1378,6 +1419,9 @@ export default function App() {
           onToggleLike={handleToggleLike}
           onToggleBookmark={handleToggleBookmark}
           onAddComment={handleAddComment}
+          onDeleteComment={handleDeleteComment}
+          currentUserId={currentUser.id}
+          canModerateComments={isAdmin}
           onAddToMealPlan={handleAddToMealPlan}
           followedUserIds={followedUserIds}
           onToggleFollow={handleToggleFollow}
@@ -1428,6 +1472,7 @@ export default function App() {
           initialTab={profileInitialTab}
           showOrders={featureFlags.delivery}
           showReferrals={featureFlags.referrals}
+          onToggleLike={handleToggleLike}
           onUpdateCurrentUser={handleUpdateUser}
           onSaveProfile={handleSaveProfile}
           onSignOut={handleSignOut}
