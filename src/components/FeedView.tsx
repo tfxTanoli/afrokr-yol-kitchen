@@ -20,13 +20,14 @@ import {
   Zap,
   Film,
   Layers,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { Recipe, User, Story } from '../types';
 import { CulinaryBadgeChip } from './CulinaryBadgeChip';
 import { getAuthorCulinaryBadge } from '../utils/badgeSystem';
 import { StoriesBar } from './StoriesBar';
-import { CategoriesBar } from './CategoriesBar';
+import { CategoriesBar, recipeMatchesCategory } from './CategoriesBar';
 import { VerticalRecipeSlides } from './VerticalRecipeSlides';
 import { SupportedLanguage, TRANSLATIONS } from '../i18n/translations';
 import { AdBanner } from './AdBanner';
@@ -56,6 +57,14 @@ interface FeedViewProps {
   onOpenShare?: (item: ShareableItem) => void;
   language?: SupportedLanguage;
 }
+
+// Result line shown under the category chips
+const CATEGORY_RESULT_TEXT: Partial<Record<SupportedLanguage, { count: (n: number) => string; none: (label: string) => string; showAll: string }>> = {
+  fr: { count: n => `${n} recette${n > 1 ? 's' : ''}`, none: l => `Aucune recette pour « ${l} » pour le moment.`, showAll: 'Voir toutes les recettes' },
+  en: { count: n => `${n} recipe${n > 1 ? 's' : ''}`, none: l => `No "${l}" recipes yet.`, showAll: 'Show all recipes' },
+  pt: { count: n => `${n} receita${n > 1 ? 's' : ''}`, none: l => `Ainda não há receitas de «${l}».`, showAll: 'Ver todas as receitas' },
+  es: { count: n => `${n} receta${n > 1 ? 's' : ''}`, none: l => `Aún no hay recetas de «${l}».`, showAll: 'Ver todas las recetas' }
+};
 
 const REGION_STORIES = [
   { name: 'Sénégal', flag: '🇸🇳', dish: 'Ceebu Jën', count: 18 },
@@ -137,24 +146,23 @@ export const FeedView: React.FC<FeedViewProps> = ({
     }
   };
 
-  // Filter recipes by selected category
-  const filteredRecipes = recipes.filter(r => {
-    if (!selectedCategory || selectedCategory === 'all') return true;
-    const catLower = selectedCategory.toLowerCase();
-    const recipeCatLower = r.category.toLowerCase();
-    const recipeTitleLower = r.title.toLowerCase();
-    const recipeDescLower = r.description.toLowerCase();
-    return (
-      recipeCatLower.includes(catLower) ||
-      recipeTitleLower.includes(catLower) ||
-      recipeDescLower.includes(catLower)
-    );
-  });
+  // Filter recipes by selected category (applies to the sliders and the feed below)
+  const isAllCategories = !selectedCategory || selectedCategory === 'all';
+  const filteredRecipes = recipes.filter(r => recipeMatchesCategory(r, selectedCategory));
+  const selectedCategoryLabel = t[`cat${selectedCategory.replace(/\s+/g, '')}`] || selectedCategory;
+  const categoryText = CATEGORY_RESULT_TEXT[language] ?? CATEGORY_RESULT_TEXT.fr!;
 
   // Infinite Scroll on feed
   const [visibleCount, setVisibleCount] = useState(4);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const feedSentinelRef = useRef<HTMLDivElement>(null);
+
+  // A new category starts from the top of its results
+  useEffect(() => {
+    setVisibleCount(4);
+    trendingSliderRef.current?.scrollTo({ left: 0 });
+    quickSliderRef.current?.scrollTo({ left: 0 });
+  }, [selectedCategory]);
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
@@ -174,8 +182,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
   }, [visibleCount, isLoadingMore, filteredRecipes.length]);
 
   // Fast recipes for horizontal slide 2
-  const quickRecipes = recipes.filter(r => (r.prepTimeMinutes + r.cookTimeMinutes) <= 35);
-  const displayQuickRecipes = quickRecipes.length >= 3 ? quickRecipes : recipes.slice(2, 8);
+  const quickRecipes = filteredRecipes.filter(r => (r.prepTimeMinutes + r.cookTimeMinutes) <= 35);
+  const displayQuickRecipes = isAllCategories && quickRecipes.length < 3 ? recipes.slice(2, 8) : quickRecipes;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
@@ -220,9 +228,27 @@ export const FeedView: React.FC<FeedViewProps> = ({
               onSelectCategory={(cat) => setSelectedCategory(cat)}
               language={language}
             />
+            {!isAllCategories && (
+              <div className="flex flex-wrap items-center gap-2 px-1" role="status">
+                <span className="text-xs font-semibold text-slate-600">
+                  {filteredRecipes.length === 0
+                    ? categoryText.none(selectedCategoryLabel)
+                    : `${categoryText.count(filteredRecipes.length)} · ${selectedCategoryLabel}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  <span>{categoryText.showAll}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 3. Horizontal Slide 1: Tendances Afro-Caribéennes */}
+          {filteredRecipes.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
@@ -256,7 +282,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
               className="flex items-stretch gap-4 overflow-x-auto scroll-smooth no-scrollbar py-1 snap-x snap-mandatory"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              {recipes.slice(0, 6).map((recipe) => (
+              {filteredRecipes.slice(0, 6).map((recipe) => (
                 <div
                   key={`trending-${recipe.id}`}
                   onClick={() => onSelectRecipe(recipe.id)}
@@ -331,7 +357,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
             </div>
           </div>
 
+          )}
+
           {/* Horizontal Slide 2: Recettes Express & Faciles (< 35 min) */}
+          {displayQuickRecipes.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
@@ -427,6 +456,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
               ))}
             </div>
           </div>
+
+          )}
 
           {/* 4. Terroirs & Régions Culinaires Filters */}
           <div className="space-y-2.5">

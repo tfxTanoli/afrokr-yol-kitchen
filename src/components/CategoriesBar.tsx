@@ -16,6 +16,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { SupportedLanguage, TRANSLATIONS } from '../i18n/translations';
+import type { Recipe } from '../types';
 
 export interface CategoryItem {
   id: string;
@@ -42,6 +43,48 @@ export const CULINARY_CATEGORIES: CategoryItem[] = [
   { id: 'Kids', name: 'Kids', emoji: '🧒', icon: Smile, gradient: 'from-yellow-500 to-orange-500' },
   { id: 'Vegetarian', name: 'Vegetarian', emoji: '🥕', icon: Carrot, gradient: 'from-emerald-500 to-green-600' },
 ];
+
+/**
+ * How each chip finds its recipes. Recipes are written in French while the chip ids are
+ * English, so every chip lists French and English words (accents removed, matched at the
+ * start of a word in the title, description and category) and/or whole recipe categories.
+ */
+const CATEGORY_RULES: Record<string, { keywords: string[]; recipeCategories?: Recipe['category'][] }> = {
+  Rice: { keywords: ['riz', 'rice', 'jollof', 'ceebu', 'thiebou', 'thieb', 'waakye', 'pilaf'] },
+  Chicken: { keywords: ['poulet', 'chicken', 'yassa', 'volaille', 'poule'] },
+  Soup: { keywords: ['soupe', 'soup', 'veloute', 'potage', 'calalou', 'callaloo', 'consomme', 'pepper soup'] },
+  Shrimp: { keywords: ['crevette', 'shrimp', 'gambas', 'ecrevisse', 'ouassou', 'prawn'] },
+  Breakfast: { keywords: ['petit-dejeuner', 'petit dejeuner', 'breakfast', 'brunch', 'bouillie', 'porridge', 'beignet', 'pancake', 'omelette'] },
+  Salmon: { keywords: ['saumon', 'salmon'] },
+  Drinks: {
+    keywords: ['boisson', 'drink', 'cocktail', 'jus', 'juice', 'bissap', 'punch', 'smoothie', 'sirop', 'limonade', 'planteur'],
+    recipeCategories: ['Boissons & Cocktails']
+  },
+  Lunch: { keywords: ['lunch', 'repas du midi'], recipeCategories: ['Plats Traditionnels'] },
+  Healthy: {
+    keywords: ['healthy', 'leger', 'legere', 'salade', 'salad', 'quinoa', 'fonio'],
+    recipeCategories: ['Végétarien & Vegan']
+  },
+  'Afro Vegan': { keywords: ['vegan', 'vegetalien', 'plant-based'], recipeCategories: ['Végétarien & Vegan'] },
+  Salad: { keywords: ['salade', 'salad', 'coleslaw'] },
+  Fish: {
+    keywords: ['poisson', 'fish', 'thon', 'thiof', 'merou', 'dorade', 'morue', 'cabillaud', 'saumon', 'tilapia', 'sardine', 'maquereau', 'hareng', 'chiquetaille']
+  },
+  Kids: { keywords: ['enfant', 'kid', 'famille', 'gouter'], recipeCategories: ['Desserts & Douceurs'] },
+  Vegetarian: { keywords: ['vegetarien', 'vegetarian', 'veggie', 'sans viande', 'vegan'], recipeCategories: ['Végétarien & Vegan'] }
+};
+
+const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** True when the recipe belongs to the chip ('all' matches everything). */
+export function recipeMatchesCategory(recipe: Recipe, categoryId: string): boolean {
+  if (!categoryId || categoryId === 'all') return true;
+  const rule = CATEGORY_RULES[categoryId] ?? { keywords: [categoryId] };
+  if (rule.recipeCategories?.includes(recipe.category)) return true;
+  const text = normalize(`${recipe.title} ${recipe.description} ${recipe.category}`);
+  return rule.keywords.some(keyword => new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalize(keyword))}`).test(text));
+}
 
 interface CategoriesBarProps {
   selectedCategory: string;
@@ -102,6 +145,8 @@ export const CategoriesBar: React.FC<CategoriesBarProps> = ({
           return (
             <button
               key={cat.id}
+              type="button"
+              aria-pressed={isSelected}
               onClick={() => onSelectCategory(cat.id)}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl whitespace-nowrap text-xs font-bold transition-all duration-200 shrink-0 select-none ${
                 isSelected
