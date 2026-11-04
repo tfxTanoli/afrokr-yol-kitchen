@@ -28,7 +28,9 @@ import {
   Utensils,
   Timer,
   Trash2,
-  Loader2
+  Loader2,
+  Video,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Recipe, User } from '../types';
 import { CulinaryBadgeChip } from './CulinaryBadgeChip';
@@ -239,7 +241,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
           {/* Top-Left: Circular White Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-4 left-4 w-10 h-10 rounded-full bg-white/95 hover:bg-white text-slate-800 shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer"
+            className="absolute top-4 left-4 w-10 h-10 rounded-full bg-white/95 hover:bg-white text-slate-800 shadow-md backdrop-blur-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer"
             aria-label="Fermer"
           >
             <X className="w-5 h-5 stroke-[2.5]" />
@@ -250,7 +252,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
             {/* Heart / Favorite Button matching reference */}
             <button
               onClick={() => onToggleLike(recipe.id)}
-              className={`w-10 h-10 rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+              className={`w-10 h-10 rounded-full bg-white/95 hover:bg-white shadow-md backdrop-blur-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
                 recipe.isLiked ? 'text-rose-600' : 'text-slate-700 hover:text-rose-600'
               }`}
               title="Ajouter aux favoris"
@@ -262,7 +264,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
             {/* Bookmark Button */}
             <button
               onClick={() => onToggleBookmark(recipe.id)}
-              className={`w-10 h-10 rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+              className={`w-10 h-10 rounded-full bg-white/95 hover:bg-white shadow-md backdrop-blur-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
                 recipe.isBookmarked ? 'text-emerald-700' : 'text-slate-700 hover:text-emerald-700'
               }`}
               title="Sauvegarder la recette"
@@ -274,7 +276,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
             {/* Share Button */}
             <button
               onClick={handleShareClick}
-              className="w-10 h-10 rounded-full bg-white/95 hover:bg-white shadow-md text-slate-700 hover:text-[#FF4E27] flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              className="w-10 h-10 rounded-full bg-white/95 hover:bg-white shadow-md backdrop-blur-md text-slate-700 hover:text-[#FF4E27] flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
               title="Partager"
               aria-label="Partager"
             >
@@ -641,6 +643,41 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                       <p className="text-xs text-slate-700 leading-relaxed font-normal mb-3">
                         {st.instruction}
                       </p>
+
+                      {/* Step Photo or Video (max 30s) */}
+                      {st.mediaUrl && (
+                        <div className="mb-3 rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 p-1 shadow-xs">
+                          {st.mediaType === 'video' ? (
+                            <div className="space-y-1">
+                              <video
+                                src={st.mediaUrl}
+                                controls
+                                playsInline
+                                className="w-full max-h-56 rounded-xl object-contain bg-black"
+                              />
+                              <div className="flex items-center justify-between px-2 py-1 text-[10px] text-slate-300">
+                                <span className="flex items-center gap-1 font-bold text-emerald-400">
+                                  <Video className="w-3 h-3" />
+                                  <span>Vidéo pas-à-pas ({st.videoDurationSeconds || 30}s max)</span>
+                                </span>
+                                <span className="font-mono text-slate-400">Capsule courte 30s</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="relative h-44 w-full rounded-xl overflow-hidden">
+                              <img
+                                src={st.mediaUrl}
+                                alt={`Étape ${st.stepNumber}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white text-[10px] font-bold flex items-center gap-1.5">
+                                <ImageIcon className="w-3 h-3 text-emerald-400" />
+                                <span>Photo de préparation</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Interactive Step Timer Button (Matching green '+ Start Rice Timer' from Screen 3) */}
                       {st.durationMinutes && (

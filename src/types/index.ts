@@ -122,6 +122,10 @@ export interface User {
     postalCode: string;
     country: string;
   };
+  preferences?: {
+    favoriteCuisines?: string[];
+    dietaryRestrictions?: string[];
+  };
 }
 
 export interface Ingredient {
@@ -138,6 +142,9 @@ export interface RecipeStep {
   instruction: string;
   durationMinutes?: number;
   tip?: string;
+  mediaType?: 'photo' | 'video' | 'none';
+  mediaUrl?: string;
+  videoDurationSeconds?: number; // max 30 seconds
 }
 
 export interface Comment {
@@ -216,7 +223,7 @@ export interface Course {
   enrolledStudentsCount: number;
   isEnrolled?: boolean;
   progressPercent?: number;
-  category?: 'Foods' | 'Fun' | 'Class' | 'Other';
+  category?: 'All' | 'Main courses' | 'Entree' | 'Cuisine' | 'Dishes' | 'Deserts' | 'Baking' | 'Kids' | 'Beverages' | 'Appetizes' | 'Salad' | 'Breakfast' | 'Soups & Stews' | string;
   country?: string;
   countryFlag?: string;
   scheduleDate?: string;

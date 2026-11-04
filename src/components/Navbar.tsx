@@ -32,7 +32,16 @@ import {
   Crown,
   Clock,
   Trash2,
-  History
+  History,
+  Gift,
+  FileText,
+  Lock,
+  Cookie,
+  MessageSquareHeart,
+  Info,
+  Copy,
+  Check,
+  Share2
 } from 'lucide-react';
 import { User, Recipe, PlatformFeatureFlags } from '../types';
 import { CulinaryBadgeChip } from './CulinaryBadgeChip';
@@ -40,6 +49,7 @@ import { getAuthorCulinaryBadge } from '../utils/badgeSystem';
 import { AfrodeliciousLogo } from './AfrodeliciousLogo';
 import { SupportedLanguage, SUPPORTED_LANGUAGES, TRANSLATIONS } from '../i18n/translations';
 import { useRecentSearches } from '../utils/recentSearches';
+import { LegalInformationModal, LegalTab } from './LegalInformationModal';
 
 interface NavbarProps {
   activeTab: string;
@@ -62,6 +72,7 @@ interface NavbarProps {
   onOpenCreateRecipe?: () => void;
   onOpenImportUrl?: () => void;
   onOpenScanPhoto?: () => void;
+  onOpenPricing?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -81,6 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCreateRecipe,
   onOpenImportUrl,
   onOpenScanPhoto,
+  onOpenPricing,
   recipes = [],
   language = 'fr',
   onSelectLanguage = () => {},
@@ -90,6 +102,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [hubDropdownOpen, setHubDropdownOpen] = useState(false);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+
+  // Legal Modal & Transferred Items State
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [legalInitialTab, setLegalInitialTab] = useState<LegalTab>('terms');
+  const [hasCopiedReferralCode, setHasCopiedReferralCode] = useState(false);
 
   const hubRef = useRef<HTMLDivElement>(null);
   const langRef = useRef<HTMLDivElement>(null);
@@ -145,8 +162,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const hubNavItems = [
     {
       id: 'masterclasses',
-      label: 'MasterClass',
-      subtitle: 'Cours & masterclasses en vidéo pas-à-pas',
+      label: 'Online Cooking Classes',
+      subtitle: 'Cours de cuisine en ligne & vidéos pas-à-pas',
       icon: GraduationCap,
       badge: 'Vidéos',
       badgeColor: 'bg-emerald-100 text-emerald-800',
@@ -262,7 +279,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Dropdown: Recent Searches & Suggestions */}
               {isSearchDropdownOpen && (
-                <div className="fixed sm:absolute left-3 right-3 top-[3.75rem] sm:top-full sm:left-auto sm:right-0 sm:w-80 lg:left-0 lg:w-auto sm:mt-2bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2.5 px-3 z-50 text-slate-800 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="fixed sm:absolute left-3 right-3 top-[3.75rem] sm:top-full sm:left-auto sm:right-0 sm:w-80 lg:left-0 lg:w-auto sm:mt-2 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2.5 px-3 z-50 text-slate-800 animate-in fade-in slide-in-from-top-1 duration-150">
                   {/* Recent Searches Header */}
                   <div className="flex items-center justify-between px-1.5 pb-2 border-b border-slate-100">
                     <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -741,7 +758,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
                 <div className="text-lg font-black tracking-tight">145.50 € <span className="text-xs font-normal text-emerald-100">disponible</span></div>
                 <p className="text-[10px] text-emerald-100 leading-snug">
-                  Vous conservez 70% de vos gains MasterClasses & Ateliers. Retrait direct via Wave ou E-Wallet.
+                  Vous conservez 70% de vos gains Online Cooking Classes & Ateliers. Retrait direct via Wave ou E-Wallet.
                 </p>
               </div>
 
@@ -782,6 +799,171 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </span>
                   </button>
                 )}
+              </div>
+
+              {/* ========================================================== */}
+              {/* ÉLÉMENTS TRANSFÉRÉS DU PROFIL DANS LE MENU BURGER           */}
+              {/* Parrainages & gains, Abonnements, legal, About us,         */}
+              {/* Termes of use, RGPD, CGV, Cookie policy, Feedback & avis   */}
+              {/* ========================================================== */}
+
+              {/* 1. Parrainages & Gains (hidden when the referrals module is switched off) */}
+              {featureFlags?.referrals !== false && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-transparent border border-orange-200/90 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#FF4E27] text-white flex items-center justify-center shadow-xs">
+                      <Gift className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-slate-900 block leading-tight">
+                        Parrainages & Gains
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        50 € cumulés · 5 filleuls actifs
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                    +10 € / ami
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-orange-200/60 text-xs">
+                  <span className="font-mono font-black text-slate-900 flex-1 truncate">
+                    AFRO-GOURMET-2026
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('AFRO-GOURMET-2026');
+                      setHasCopiedReferralCode(true);
+                      setTimeout(() => setHasCopiedReferralCode(false), 2000);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF4E27] font-bold flex items-center gap-1 text-[11px] transition-colors cursor-pointer"
+                  >
+                    {hasCopiedReferralCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{hasCopiedReferralCode ? 'Copié' : 'Copier'}</span>
+                  </button>
+                  <a
+                    href="https://wa.me/?text=Rejoins-moi%20sur%20Afrodelicious%20avec%20mon%20code%20AFRO-GOURMET-2026%20pour%20profiter%20de%20-20%25%20sur%20tes%20cours%20de%20cuisine%20!"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg bg-[#25D366] text-white hover:bg-[#20bd5a] transition-colors"
+                    title="Partager sur WhatsApp"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+              )}
+
+              {/* 2. Abonnements (Afrodelicious+ VIP Pass) */}
+              <div 
+                onClick={() => {
+                  setSideMenuOpen(false);
+                  onOpenPricing?.();
+                }}
+                className="p-3.5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-amber-950 text-white shadow-xs space-y-2 cursor-pointer hover:scale-[1.01] transition-transform border border-amber-500/30 group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-bold group-hover:rotate-12 transition-transform">
+                      <Crown className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-white block leading-tight group-hover:text-amber-300 transition-colors">
+                        Abonnements Afrodelicious+
+                      </span>
+                      <span className="text-[10px] text-amber-300 font-medium">
+                        4 magazines papier / an · 0 publicité
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold border border-amber-400/30 group-hover:bg-amber-400 group-hover:text-slate-950 transition-colors">
+                    Pass VIP →
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-300 leading-snug">
+                  Accédez à tous les cours en illimité, téléchargez nos guides PDF exclusifs et recevez nos 4 numéros papier annuels chez vous.
+                </p>
+              </div>
+
+              {/* 3. Informations Légales & Conformité */}
+              <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 px-1 pb-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Informations Légales & Conformité
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-1">
+                  {[
+                    { tab: 'privacy' as LegalTab, label: 'About us', desc: 'Notre histoire & mission culinaire', icon: Info },
+                    { tab: 'terms' as LegalTab, label: 'Termes of use', desc: 'Conditions générales d\'utilisation', icon: FileText },
+                    { tab: 'rgpd' as LegalTab, label: 'RGPD', desc: 'Protection des données & export personnel', icon: Lock },
+                    { tab: 'cgu' as LegalTab, label: 'CGV', desc: 'Conditions de vente & garanties', icon: FileText },
+                    { tab: 'cookies' as LegalTab, label: 'Cookie policy', desc: 'Gestion des traceurs et préférences', icon: Cookie },
+                  ].map((legalItem) => {
+                    const ItemIcon = legalItem.icon;
+                    return (
+                      <button
+                        key={legalItem.tab}
+                        type="button"
+                        onClick={() => {
+                          setLegalInitialTab(legalItem.tab);
+                          setIsLegalModalOpen(true);
+                          setSideMenuOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-6 h-6 rounded-lg bg-slate-100 group-hover:bg-orange-50 text-slate-500 group-hover:text-[#FF4E27] flex items-center justify-center transition-colors">
+                            <ItemIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 group-hover:text-[#FF4E27] block leading-tight transition-colors">
+                              {legalItem.label}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {legalItem.desc}
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-[#FF4E27] group-hover:translate-x-0.5 transition-all" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. Feedback & avis */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLegalInitialTab('feedback');
+                    setIsLegalModalOpen(true);
+                    setSideMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-rose-50 to-orange-50 hover:from-rose-100 hover:to-orange-100 border border-rose-200/60 text-left transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2">
+                    <MessageSquareHeart className="w-4 h-4 text-rose-500 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block leading-tight">
+                        Feedback & avis
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Donnez votre avis ou signalez un bug
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-rose-700 bg-white px-2 py-0.5 rounded-full shadow-2xs">
+                    Votre voix ❤️
+                  </span>
+                </button>
               </div>
 
             </div>
@@ -854,7 +1036,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'bg-gradient-to-r from-[#FF4E27] via-[#FF5E3A] to-[#FF7849] text-white shadow-[0_6px_20px_rgba(255,78,39,0.35)] ring-1 ring-white/30 scale-[1.02] -translate-y-0.5'
                 : 'text-slate-700 hover:text-[#FF4E27] hover:bg-white bg-white/80 border border-slate-200/80 shadow-2xs hover:shadow-sm hover:scale-105 active:scale-95'
             }`}
-            title="Hub Afrodelicious : MasterClass, Experiences, Recommander, Delivery & Communautés"
+            title="Hub Afrodelicious : Online Cooking Classes, Experiences, Recommander, Delivery & Communautés"
           >
             <Layers className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:rotate-12 ${
               isHubActive ? 'text-white' : 'text-[#FF4E27]'
@@ -884,7 +1066,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
-                  MasterClass, Expériences, Recommandations, Livraison & Cercles
+                  Online Cooking Classes, Expériences, Recommandations, Livraison & Cercles
                 </span>
               </div>
 
@@ -937,6 +1119,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
       </nav>
+
+      {/* Legal & Feedback Modal */}
+      <LegalInformationModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialTab={legalInitialTab}
+        language={language}
+      />
     </>
   );
 };

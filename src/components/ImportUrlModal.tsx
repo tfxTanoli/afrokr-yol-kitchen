@@ -12,6 +12,7 @@ import {
   Utensils
 } from 'lucide-react';
 import { Recipe, User } from '../types';
+import { getCountryFlag } from '../utils/countryFlags';
 
 interface ImportUrlModalProps {
   isOpen: boolean;
@@ -169,24 +170,27 @@ export const ImportUrlModal: React.FC<ImportUrlModalProps> = ({
   const handleConfirmSave = () => {
     if (!extractedData) return;
 
+    const countryName = extractedData.country || 'Sénégal';
+    const flag = extractedData.countryFlag || getCountryFlag(countryName);
+
     const newRecipe: Recipe = {
       id: `imported-${Date.now()}`,
       title: extractedData.title || 'Recette importée',
-      description: extractedData.description || 'Recette extraite du web.',
+      description: extractedData.description || 'Recette extraite du web et publiée par la communauté.',
       authorId: currentUser.id,
       authorName: currentUser.name,
       authorAvatar: currentUser.avatar,
-      authorHandle: currentUser.handle,
+      authorHandle: currentUser.handle || `@${currentUser.name.toLowerCase().replace(/\s+/g, '_')}`,
       authorRole: currentUser.role,
-      country: extractedData.country || 'Sénégal',
-      countryFlag: extractedData.countryFlag || '🇸🇳',
+      country: countryName,
+      countryFlag: flag,
       category: (extractedData.category as any) || 'Plats Traditionnels',
       difficulty: (extractedData.difficulty as any) || 'Moyen',
       prepTimeMinutes: extractedData.prepTimeMinutes || 25,
       cookTimeMinutes: extractedData.cookTimeMinutes || 30,
       servings: extractedData.servings || 4,
       imageUrl: extractedData.imageUrl || 'https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=800',
-      heritageStory: extractedData.heritageStory || 'Recette extraite depuis un lien social culinaire.',
+      heritageStory: extractedData.heritageStory || 'Recette importée depuis un lien web/social et partagée sur le feed Afrodelicious.',
       likesCount: 1,
       commentsCount: 0,
       bookmarksCount: 0,
@@ -345,10 +349,10 @@ export const ImportUrlModal: React.FC<ImportUrlModalProps> = ({
                 <button
                   type="button"
                   onClick={handleConfirmSave}
-                  className="px-4 py-2 rounded-xl bg-[#0F3E2E] text-white text-xs font-bold hover:bg-[#15523E] shadow-sm flex items-center gap-1.5"
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#FF4E27] to-[#FF7849] hover:from-[#E03814] hover:to-[#FF4E27] text-white text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                 >
-                  <Utensils className="w-3.5 h-3.5" />
-                  <span>Enregistrer dans mon carnet</span>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Enregistrer & Publier (Feed & Profil Instagram)</span>
                 </button>
               </div>
             </div>

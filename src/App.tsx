@@ -40,6 +40,7 @@ import { AdminDashboardView } from './components/admin/AdminDashboardView';
 import { ShoppingListView } from './components/ShoppingListView';
 import { ShareModal, ShareableItem } from './components/ShareModal';
 import { AfrodeliciousLogo } from './components/AfrodeliciousLogo';
+import { PricingModal } from './components/PricingModal';
 import { SupportedLanguage } from './i18n/translations';
 import { PlatformFeatureFlags } from './types';
 import { FEATURE_FLAG_DEFAULTS, FEATURE_FLAG_LABELS, fetchFeatureFlags, setAllFeatureFlags, setFeatureFlag } from './services/featureFlagService';
@@ -67,7 +68,7 @@ const FOOTER_LINKS: { tab: string; label: string; className?: string }[] = [
   { tab: 'delivery', label: 'Delivery Food' },
   { tab: 'recommended', label: '⭐ Restaurants Recommandés', className: 'text-amber-600 font-bold' },
   { tab: 'experiences', label: 'Expériences' },
-  { tab: 'masterclasses', label: 'Masterclasses' },
+  { tab: 'masterclasses', label: 'Online Cooking Classes' },
   { tab: 'saved', label: 'Saved' },
   { tab: 'planner', label: 'Planner' },
   { tab: 'list', label: 'List' }
@@ -246,6 +247,7 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [language, setLanguage] = useState<SupportedLanguage>('fr');
 
   // Stories State & Drawers
@@ -904,6 +906,7 @@ export default function App() {
         onOpenCreateRecipe={openCreateRecipe}
         onOpenImportUrl={openImportUrl}
         onOpenScanPhoto={featureFlags.foodCamera ? () => setIsFoodCameraOpen(true) : undefined}
+        onOpenPricing={() => setIsPricingModalOpen(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         language={language}
@@ -1485,6 +1488,8 @@ export default function App() {
           followedUserIds={followedUserIds}
           onToggleFollow={handleToggleFollow}
           onOpenShare={(item) => setShareModalItem(item)}
+          onOpenPricing={() => setIsPricingModalOpen(true)}
+          onChangeLanguage={setLanguage}
           onAddTipToDriver={(orderId, tipAmount) => {
             setDeliveryOrders(prev => prev.map(o => {
               if (o.id === orderId) {
@@ -1545,9 +1550,28 @@ export default function App() {
           onResetFeatureFlags={handleResetFeatureFlags}
           onNavigateToTab={(tabId) => setActiveTab(tabId)}
           onOpenCreateRecipe={openCreateRecipe}
+          onOpenPricing={() => setIsPricingModalOpen(true)}
           language={language}
         />
       )}
+
+      {/* Pricing & Subscription Modal */}
+      <PricingModal
+        isOpen={isPricingModalOpen}
+        onClose={() => setIsPricingModalOpen(false)}
+        currentUser={currentUser}
+        onUpdateCurrentUser={handleUpdateUser}
+        onNotify={(msg) => pushNotification({
+          id: `pricing-notif-${Date.now()}`,
+          type: 'system',
+          title: 'Afrodelicious+ Abonnements 👑',
+          message: msg,
+          actorName: 'Club VIP',
+          actorAvatar: currentUser.avatar,
+          createdAt: "À l'instant",
+          isRead: false
+        })}
+      />
 
       <SavedRecipesModal
         isOpen={isSavedOpen}
