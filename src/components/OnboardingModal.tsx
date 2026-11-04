@@ -250,7 +250,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 <div className="absolute bottom-6 left-6 right-6 z-10 space-y-2 text-white">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FF4E27]/90 backdrop-blur-md text-white text-[11px] font-black uppercase tracking-wider shadow-lg">
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Expérience Immersive</span>
+                    <span>Réseau Social Culinaire Collaboratif</span>
                   </div>
                   <h1 className="font-serif font-black text-2xl sm:text-4xl text-white tracking-tight drop-shadow-md">
                     Bienvenue sur Afrodelicious
@@ -261,7 +261,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               {/* Text Description requested */}
               <div className="p-6 sm:p-8 space-y-4 bg-white">
                 <p className="font-serif text-lg sm:text-xl text-slate-800 leading-relaxed font-semibold">
-                  Plongez au cœur des saveurs d’Afrique et des Caraïbes. Découvrez des milliers de recettes transmises avec amour et authenticité.
+                  Le réseau social culinaire de recettes de cuisine collaboratif d’Afrique et des Caraïbes. Partagez, découvrez et cocréez des milliers de recettes transmises avec passion et authenticité.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">

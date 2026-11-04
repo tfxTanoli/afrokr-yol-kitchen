@@ -48,7 +48,7 @@ export const FEATURE_FLAG_HINTS: Partial<Record<keyof PlatformFeatureFlags, stri
   planner: 'Planificateur de repas',
   grocery: 'Liste de courses',
   savedRecipes: 'Onglet Recettes sauvegardées',
-  referrals: 'Onglet Parrainage du profil'
+  referrals: 'Carte Parrainage & Gains du menu'
 };
 
 /**

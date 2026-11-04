@@ -39,6 +39,7 @@ import {
   getRecipeIngredientCategories
 } from '../data/afroCaribbeanIngredients';
 import { AdBanner } from './AdBanner';
+import { getCountryFlag, formatCountryWithFlag } from '../utils/countryFlags';
 
 interface ExploreViewProps {
   recipes: Recipe[];
@@ -462,7 +463,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200/70'
               }`}
             >
-              {c}
+              {c === 'Tous les pays' ? '🌍 Tous les pays' : formatCountryWithFlag(c)}
             </button>
           ))}
         </div>
@@ -609,223 +610,6 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           </div>
         </div>
 
-        {/* 5 GLOSSY FEATURE CARDS / BUTTONS (EXACT DESIGN INSPIRATION FROM UPLOADED REFERENCE IMAGES) */}
-        <div className="space-y-2 pt-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider px-1">
-            <span>Raccourcis & Cartes Gourmandes</span>
-            <span className="text-[10px] text-[#FF4E27] font-black lowercase tracking-normal">
-              cliquez pour filtrer
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-            
-            {/* Card 1: VIOLET GLOSSY BUTTON (Inspired by "FLASH SALE 50% OFF") */}
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedCategory === 'Street Food') {
-                  setSelectedCategory('Toutes les catégories');
-                } else {
-                  setSelectedCategory('Street Food');
-                }
-              }}
-              className={`relative overflow-hidden p-3 rounded-3xl text-left transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-lg hover:-translate-y-1 active:scale-95 ${
-                selectedCategory === 'Street Food'
-                  ? 'ring-2 ring-purple-600 shadow-purple-500/30'
-                  : ''
-              } bg-gradient-to-br from-[#8B5CF6] via-[#7C3AED] to-[#6D28D9] text-white`}
-            >
-              {/* Glossy top specular reflection */}
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent h-1/2 pointer-events-none" />
-              
-              <div className="relative flex items-center justify-between mb-2">
-                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs font-bold">
-                  22:45
-                </span>
-                <div className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-yellow-300 fill-yellow-300" />
-                </div>
-              </div>
-
-              <div className="relative space-y-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider block leading-tight text-purple-100">
-                  FLASH SALE
-                </span>
-                <span className="text-xs font-black block text-white leading-tight">
-                  Street Food
-                </span>
-                <div className="pt-1.5 flex items-center justify-between">
-                  <span className="text-[9px] px-2 py-0.5 rounded-xl bg-purple-900/40 text-purple-200 font-bold">
-                    50% OFF
-                  </span>
-                </div>
-              </div>
-            </button>
-
-            {/* Card 2: AMBER / ORANGE GLOSSY BUTTON (Inspired by "Save Up to 30 AED") */}
-            <button
-              type="button"
-              onClick={() => {
-                if (sortBy === 'time') {
-                  setSortBy('popular');
-                } else {
-                  setSortBy('time');
-                }
-              }}
-              className={`relative overflow-hidden p-3 rounded-3xl text-left transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-lg hover:-translate-y-1 active:scale-95 ${
-                sortBy === 'time' ? 'ring-2 ring-amber-500 shadow-amber-500/30' : ''
-              } bg-gradient-to-br from-[#F59E0B] via-[#F97316] to-[#EA580C] text-white`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent h-1/2 pointer-events-none" />
-
-              <div className="relative flex items-center justify-between mb-2">
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs">
-                  Save Up
-                </span>
-                <div className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center">
-                  <Gift className="w-4 h-4 text-amber-100" />
-                </div>
-              </div>
-
-              <div className="relative space-y-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider block leading-tight text-amber-100">
-                  Prêt en 20 min
-                </span>
-                <span className="text-xs font-black block text-white leading-tight">
-                  Recettes Express
-                </span>
-                <div className="pt-1.5 flex items-center justify-between">
-                  <span className="text-[9px] px-2 py-0.5 rounded-xl bg-orange-950/40 text-amber-200 font-bold">
-                    ⏱️ Rapide
-                  </span>
-                </div>
-              </div>
-            </button>
-
-            {/* Card 3: CORAL / RED GLOSSY BUTTON (Inspired by "Super Save" with Rocket) */}
-            <button
-              type="button"
-              onClick={() => {
-                if (sortBy === 'popular') {
-                  setSortBy('recent');
-                } else {
-                  setSortBy('popular');
-                }
-              }}
-              className={`relative overflow-hidden p-3 rounded-3xl text-left transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-lg hover:-translate-y-1 active:scale-95 ${
-                sortBy === 'popular' ? 'ring-2 ring-rose-500 shadow-rose-500/30' : ''
-              } bg-gradient-to-br from-[#FF4E27] via-[#E11D48] to-[#BE123C] text-white`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent h-1/2 pointer-events-none" />
-
-              <div className="relative flex items-center justify-between mb-2">
-                <div className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center">
-                  <Rocket className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs">
-                  Top ★
-                </span>
-              </div>
-
-              <div className="relative space-y-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider block leading-tight text-rose-100">
-                  Super Save
-                </span>
-                <span className="text-xs font-black block text-white leading-tight">
-                  Les Plus Aimés
-                </span>
-                <div className="pt-1.5 flex items-center justify-between">
-                  <span className="text-[9px] px-2 py-0.5 rounded-xl bg-red-950/40 text-rose-200 font-bold">
-                    🚀 Viral
-                  </span>
-                </div>
-              </div>
-            </button>
-
-            {/* Card 4: BLUE GLOSSY BUTTON (Inspired by "FLASH SALE 50% OFF Blue") */}
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedCategory === 'Plats Traditionnels') {
-                  setSelectedCategory('Toutes les catégories');
-                } else {
-                  setSelectedCategory('Plats Traditionnels');
-                }
-              }}
-              className={`relative overflow-hidden p-3 rounded-3xl text-left transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-lg hover:-translate-y-1 active:scale-95 ${
-                selectedCategory === 'Plats Traditionnels' ? 'ring-2 ring-blue-500 shadow-blue-500/30' : ''
-              } bg-gradient-to-br from-[#38BDF8] via-[#0284C7] to-[#0369A1] text-white`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent h-1/2 pointer-events-none" />
-
-              <div className="relative flex items-center justify-between mb-2">
-                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs font-bold">
-                  Terroirs
-                </span>
-                <div className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center">
-                  <UtensilsCrossed className="w-4 h-4 text-cyan-200" />
-                </div>
-              </div>
-
-              <div className="relative space-y-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider block leading-tight text-sky-100">
-                  GRANDS PLATS
-                </span>
-                <span className="text-xs font-black block text-white leading-tight">
-                  Traditionnels
-                </span>
-                <div className="pt-1.5 flex items-center justify-between">
-                  <span className="text-[9px] px-2 py-0.5 rounded-xl bg-blue-950/40 text-sky-200 font-bold">
-                    Mijotés & Ragoûts
-                  </span>
-                </div>
-              </div>
-            </button>
-
-            {/* Card 5: EMERALD / GREEN GLOSSY BUTTON (Afro-Vegan & Bio) */}
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedCategory === 'Végétarien & Vegan') {
-                  setSelectedCategory('Toutes les catégories');
-                } else {
-                  setSelectedCategory('Végétarien & Vegan');
-                }
-              }}
-              className={`relative overflow-hidden p-3 rounded-3xl text-left transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-lg hover:-translate-y-1 active:scale-95 ${
-                selectedCategory === 'Végétarien & Vegan' ? 'ring-2 ring-emerald-500 shadow-emerald-500/30' : ''
-              } bg-gradient-to-br from-[#34D399] via-[#059669] to-[#047857] text-white`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent h-1/2 pointer-events-none" />
-
-              <div className="relative flex items-center justify-between mb-2">
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs">
-                  Sain & Bio
-                </span>
-                <div className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center">
-                  <Leaf className="w-4 h-4 text-emerald-100" />
-                </div>
-              </div>
-
-              <div className="relative space-y-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider block leading-tight text-emerald-100">
-                  AFRO-VEGAN
-                </span>
-                <span className="text-xs font-black block text-white leading-tight">
-                  Cuisine Végétale
-                </span>
-                <div className="pt-1.5 flex items-center justify-between">
-                  <span className="text-[9px] px-2 py-0.5 rounded-xl bg-emerald-950/40 text-emerald-200 font-bold">
-                    🌿 100% Végétal
-                  </span>
-                </div>
-              </div>
-            </button>
-
-          </div>
-        </div>
-
       </div>
 
       {/* Header Controls Bar (Layout Mode Toggle and Sort) */}
@@ -947,7 +731,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                       {/* Top Left: Location badge styled like 'Right Bite, Al Quoz' in reference image */}
                       <div className="absolute top-3 left-3 flex items-center gap-1.5">
                         <span className="px-3 py-1 rounded-full bg-black/65 backdrop-blur-md text-white text-[11px] font-bold border border-white/15 shadow-lg flex items-center gap-1.5">
-                          <span>{recipe.countryFlag}</span>
+                          <span>{recipe.countryFlag || getCountryFlag(recipe.country)}</span>
                           <span>{recipe.country}</span>
                         </span>
                       </div>

@@ -47,7 +47,13 @@ import {
   Eye,
   EyeOff,
   UserPlus,
-  KeyRound, Loader2
+  KeyRound,
+  MoreVertical,
+  Languages,
+  ChevronLeft,
+  User as UserIcon,
+  Globe,
+  Loader2
 } from 'lucide-react';
 import { User, UserRole, Recipe } from '../types';
 import { CHEF_RODRIGUE, MEMBER_MARIE_LINE } from '../data/initialData';
@@ -59,7 +65,7 @@ import { BadgesModal } from './BadgesModal';
 import { ALL_WORLD_COUNTRIES, getCountryFlag } from '../data/allWorldCountries';
 import { CHEF_AVATARS } from '../data/appImages';
 import { calculateUserCulinaryStats } from '../utils/badgeSystem';
-import { SupportedLanguage, TRANSLATIONS } from '../i18n/translations';
+import { SupportedLanguage, TRANSLATIONS, SUPPORTED_LANGUAGES } from '../i18n/translations';
 import { LegalInformationModal, LegalTab } from './LegalInformationModal';
 import { DeliveryOrder, OrderStatus, INITIAL_ORDERS } from '../data/deliveryData';
 import { InvoiceModal } from './InvoiceModal';
@@ -90,12 +96,16 @@ interface ProfileModalProps {
   followedUserIds?: string[];
   onToggleFollow?: (userId: string, userName?: string) => void;
   onOpenShare?: (item: ShareableItem) => void;
+  onOpenPricing?: () => void;
   initialTab?: 'profile' | 'feed' | 'orders' | 'referral' | 'following' | 'auth';
   /** Module switches controlled by administrators (feature_flags). */
   showOrders?: boolean;
+  /** Referrals now live in the burger menu; kept so callers can pass the flag. */
   showReferrals?: boolean;
   /** Saves a like in the database; without it likes in the profile feed stay local. */
   onToggleLike?: (recipeId: string) => void;
+  /** Applies the language picked in the "Change Language" screen. */
+  onChangeLanguage?: (language: SupportedLanguage) => void;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
@@ -109,6 +119,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onSelectRecipe,
   onOpenCreateRecipe,
   onOpenOnboarding,
+  onOpenPricing,
   language = 'fr',
   orders,
   onAddTipToDriver,
@@ -119,23 +130,74 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onOpenShare,
   initialTab,
   showOrders = true,
-  showReferrals = true,
-  onToggleLike
+  onToggleLike,
+  onChangeLanguage
 }) => {
   if (!isOpen) return null;
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.fr;
-  const isTabAvailable = (tab?: string) => !((tab === 'orders' && !showOrders) || (tab === 'referral' && !showReferrals));
-  const [activeTab, setActiveTab] = useState<'profile' | 'feed' | 'orders' | 'referral' | 'following' | 'auth'>(
-    initialTab && isTabAvailable(initialTab) ? initialTab : 'profile'
+  const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'feed' | 'orders' | 'refund' | 'password' | 'language' | 'following' | 'auth'>(
+    initialTab === 'orders' && showOrders ? 'orders' : initialTab === 'feed' ? 'feed' : initialTab === 'following' ? 'following' : initialTab === 'auth' ? 'auth' : 'overview'
   );
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  const [ordersList, setOrdersList] = useState<DeliveryOrder[]>(orders || INITIAL_ORDERS);
+
+  // Password & Security State (Supabase Auth)
+  const { updatePassword } = useAuth();
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isUpdatingPassword) return;
+    setPasswordFeedback(null);
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordFeedback({ type: 'error', message: 'Les deux mots de passe ne correspondent pas.' });
+      return;
+    }
+    setIsUpdatingPassword(true);
+    try {
+      await updatePassword(newPasswordInput);
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      setPasswordFeedback({ type: 'success', message: 'Mot de passe mis à jour avec succès.' });
+    } catch (error) {
+      setPasswordFeedback({ type: 'error', message: toUserMessage(error) });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleSignOutClick = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await onSignOut();
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  // Refund & Wallet State
+  const [refundOrderId, setRefundOrderId] = useState(ordersList[0]?.id || 'CMD-8492');
+  const [refundReason, setRefundReason] = useState('dish_quality');
+  const [refundNotes, setRefundNotes] = useState('');
+  const [refundSuccessNotice, setRefundSuccessNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen && initialTab && isTabAvailable(initialTab)) {
-      setActiveTab(initialTab);
+    if (isOpen) {
+      if ((initialTab === 'orders' && showOrders) || initialTab === 'feed' || initialTab === 'following' || initialTab === 'auth') {
+        setActiveTab(initialTab);
+      } else {
+        setActiveTab('overview');
+      }
     }
   }, [isOpen, initialTab]);
-  const [ordersList, setOrdersList] = useState<DeliveryOrder[]>(orders || INITIAL_ORDERS);
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'in_progress' | 'delivered' | 'cancelled'>('all');
   const [tipSuccessMessage, setTipSuccessMessage] = useState<{ orderId: string; amount: number; driverName: string } | null>(null);
   const [customTipInput, setCustomTipInput] = useState<{ [orderId: string]: string }>({});
@@ -267,45 +329,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const referralCode = `AFRO-${cleanName}-2026`;
   const referralLink = `https://afrodelicious.app/join?ref=${referralCode}`;
 
-  // Account & security (Supabase Auth)
-  const { updatePassword } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [passwordFeedback, setPasswordFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [isSigningOut, setIsSigningOut] = useState(false);
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isUpdatingPassword) return;
-    setPasswordFeedback(null);
-    if (newPassword !== confirmNewPassword) {
-      setPasswordFeedback({ type: 'error', message: 'Les mots de passe ne correspondent pas.' });
-      return;
-    }
-    setIsUpdatingPassword(true);
-    try {
-      await updatePassword(newPassword);
-      setNewPassword('');
-      setConfirmNewPassword('');
-      setPasswordFeedback({ type: 'success', message: 'Mot de passe mis à jour avec succès.' });
-    } catch (error) {
-      setPasswordFeedback({ type: 'error', message: toUserMessage(error) });
-    } finally {
-      setIsUpdatingPassword(false);
-    }
-  };
-
-  const handleSignOutClick = async () => {
-    setIsSigningOut(true);
-    try {
-      await onSignOut();
-    } finally {
-      setIsSigningOut(false);
-    }
-  };
-
   // Legal Information modal state
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalModalInitialTab, setLegalModalInitialTab] = useState<LegalTab>('terms');
@@ -430,101 +453,417 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center-safe justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-md sm:max-w-lg bg-[#0B3B24] rounded-t-[32px] sm:rounded-[36px] shadow-2xl border border-emerald-900/40 overflow-hidden my-0 sm:my-6 text-slate-800 max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
         
-        {/* Header with 4 Navigation Tabs */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 overflow-x-auto">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'profile' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              Mon Profil
-            </button>
-            <button
-              onClick={() => setActiveTab('feed')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'feed' ? 'bg-[#00C9A7] text-slate-950 shadow-xs ring-1 ring-[#00C9A7]' : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5 text-[#00C9A7]" />
-              <span>Feed de mes Recettes ({userRecipes.length})</span>
-            </button>
-            {showOrders && (
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'orders' ? 'bg-[#FF4E27] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>Commandes ({ordersList.length})</span>
-              {ordersList.some(o => o.status !== 'delivered' && o.status !== 'cancelled') && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-              )}
-            </button>
-            )}
-            {showReferrals && (
-            <button
-              onClick={() => setActiveTab('referral')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'referral' ? 'bg-[#FF4E27] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              <Gift className="w-3.5 h-3.5" />
-              <span>Parrainage & Gains</span>
-            </button>
-            )}
-            <button
-              onClick={() => setActiveTab('following')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'following' ? 'bg-[#FF4E27] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Abonnements ({followedProfiles.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('auth')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'auth' 
-                  ? 'bg-gradient-to-r from-[#FF4E27] to-[#FF7849] text-white shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-              }`}
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Compte</span>
-            </button>
+        {/* ========================================================== */}
+        {/* FOREST GREEN HEADER WITH GEOMETRIC MOTIFS & CENTERED AVATAR */}
+        {/* Directly inspired by user_profil_f4e97a48.png               */}
+        {/* ========================================================== */}
+        <div className="relative pt-4 sm:pt-5 pb-6 sm:pb-8 px-4 sm:px-6 overflow-hidden shrink-0">
+          {/* Geometric decorative background shapes */}
+          <div className="absolute top-2 left-6 w-14 h-14 rounded-full bg-emerald-600/20 pointer-events-none" />
+          <div className="absolute top-14 left-2 w-16 h-16 rounded-full bg-emerald-700/25 pointer-events-none" />
+          <div className="absolute -top-4 right-10 w-20 h-20 rounded-full bg-emerald-600/15 pointer-events-none" />
+          <div className="absolute top-16 right-4 w-12 h-12 rounded-tl-full bg-emerald-700/25 pointer-events-none" />
+          <div className="absolute bottom-6 right-8 w-16 h-16 rounded-full bg-emerald-600/20 pointer-events-none" />
+
+          {/* Top Bar: Title "Profile" + 3-dots Menu + Close */}
+          <div className="relative z-30 flex items-center justify-between mb-4">
+            <h2 className="text-white font-serif font-black text-xl tracking-tight">
+              Profile
+            </h2>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  title="Options du profil"
+                  className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/40 border border-white/10 flex items-center justify-center text-white transition-all cursor-pointer"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+
+                {showMoreMenu && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-white border border-slate-200 shadow-xl py-1.5 z-50 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setActiveTab('auth');
+                      }}
+                      className="w-full px-3.5 py-2 text-left font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#FF4E27]" />
+                      <span>Compte & Sécurité</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setActiveTab('following');
+                      }}
+                      className="w-full px-3.5 py-2 text-left font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Mes abonnements ({followedProfiles.length})</span>
+                    </button>
+                    {onOpenOnboarding && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          onClose();
+                          onOpenOnboarding();
+                        }}
+                        className="w-full px-3.5 py-2 text-left font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Guide d'accueil</span>
+                      </button>
+                    )}
+                    <div className="my-1 border-t border-slate-100" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        openLegalTab('cookies');
+                      }}
+                      className="w-full px-3.5 py-2 text-left font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <Cookie className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Gestion des cookies</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        openLegalTab('terms');
+                      }}
+                      className="w-full px-3.5 py-2 text-left font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Terms of Service</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                title="Fermer"
+                className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/40 border border-white/10 flex items-center justify-center text-white transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 ml-2">
-            {onOpenOnboarding && (
+          {/* Centered Avatar with Ring and Orange Pencil Edit Badge */}
+          <div className="relative z-10 flex flex-col items-center text-center">
+            <div className="relative inline-block mb-3">
+              <div className="w-24 h-24 sm:w-26 sm:h-26 rounded-full ring-4 ring-emerald-400/50 overflow-hidden bg-emerald-950 shadow-xl">
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* Orange circular edit pencil badge at bottom right corner */}
               <button
-                onClick={() => {
-                  onClose();
-                  onOpenOnboarding();
-                }}
-                title="Revoir le guide d'accueil / Onboarding"
-                className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 transition-colors"
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                title="Modifier mes informations"
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#F97316] hover:bg-[#EA580C] text-white flex items-center justify-center shadow-lg ring-2 ring-[#0B3B24] transition-transform hover:scale-105 active:scale-90 cursor-pointer"
               >
-                <HelpCircle className="w-4 h-4" />
+                <Edit3 className="w-4 h-4" />
               </button>
-            )}
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            </div>
+
+            {/* User Name in Bold White */}
+            <h3 className="font-serif font-black text-xl text-white tracking-tight leading-snug">
+              {currentUser.name}
+            </h3>
+
+            {/* Account e-mail / handle under name */}
+            <p className="text-emerald-200/90 text-xs font-mono font-medium mt-0.5 truncate max-w-full">
+              {currentUser.email || currentUser.handle}
+            </p>
           </div>
         </div>
 
-        {/* Tab 1: Profile View */}
-        {activeTab === 'profile' && (
-          <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        {/* ========================================================== */}
+        {/* WHITE CURVED BOTTOM SHEET: ACCOUNT OVERVIEW & SUB-VIEWS     */}
+        {/* ========================================================== */}
+        <div className="rounded-t-[32px] sm:rounded-t-[36px] bg-white -mt-4 pt-5 sm:pt-6 pb-8 px-4 sm:px-6 shadow-2xl relative z-10 flex-1 overflow-y-auto overscroll-contain">
+          
+          {/* When activeTab !== 'overview', show a clean back button to Account Overview */}
+          {activeTab !== 'overview' && (
+            <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-100">
+              <button
+                type="button"
+                onClick={() => setActiveTab('overview')}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FF4E27] hover:text-[#e03814] transition-colors cursor-pointer group"
+              >
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Retour à Account Overview</span>
+              </button>
+
+              <span className="text-xs font-serif font-black text-slate-800 capitalize">
+                {activeTab === 'profile' && 'Mon Profil & Bio'}
+                {activeTab === 'feed' && 'Mes Recettes Publiées'}
+                {activeTab === 'orders' && 'Mes Commandes'}
+                {activeTab === 'refund' && 'Remboursements'}
+                {activeTab === 'password' && 'Sécurité & Mot de passe'}
+                {activeTab === 'language' && 'Langue'}
+                {activeTab === 'following' && 'Mes Abonnements'}
+                {activeTab === 'auth' && 'Compte & Sécurité'}
+              </span>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* VIEW: ACCOUNT OVERVIEW (Directly matching attached photo) */}
+          {/* ======================================================== */}
+          {activeTab === 'overview' && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <h4 className="font-serif font-black text-lg text-slate-900 tracking-tight">
+                  Account Overview
+                </h4>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {currentUser.role === 'admin' ? 'Administrateur' : 'Compte actif'}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {/* 1. My Profile */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('profile')}
+                  className="w-full p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 flex items-center justify-between transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                      <UserIcon className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="font-bold text-sm text-slate-900 group-hover:text-[#0B3B24] block leading-tight transition-colors">
+                        My Profile
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Modifier nom, avatar, bio & spécialités
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-slate-700 transition-all shrink-0" />
+                </button>
+
+                {/* 2. Feed de mes Recettes (Immediately after My Profile) */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('feed')}
+                  className="w-full p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 flex items-center justify-between transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 group-hover:text-[#0B3B24] block leading-tight transition-colors">
+                          Feed de mes Recettes
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-black border border-teal-200/60">
+                          {userRecipes.length}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        Publications style Instagram & créations importées
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-slate-700 transition-all shrink-0" />
+                </button>
+
+                {/* 3. My Orders */}
+                {showOrders && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('orders')}
+                  className="w-full p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 flex items-center justify-between transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                      <Package className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 group-hover:text-[#0B3B24] block leading-tight transition-colors">
+                          My Orders
+                        </span>
+                        {ordersList.some(o => o.status !== 'delivered' && o.status !== 'cancelled') && (
+                          <span className="px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black animate-pulse">
+                            En cours
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        {ordersList.length} commandes · Suivi & factures
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-slate-700 transition-all shrink-0" />
+                </button>
+
+                )}
+
+                {/* 4. Refund */}
+                {showOrders && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('refund')}
+                  className="w-full p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 flex items-center justify-between transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                      <RotateCcw className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="font-bold text-sm text-slate-900 group-hover:text-[#0B3B24] block leading-tight transition-colors">
+                        Refund
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Demande de remboursement & AfroWallet
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-slate-700 transition-all shrink-0" />
+                </button>
+
+                )}
+
+                {/* 5. Change Password */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('password')}
+                  className="w-full p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 flex items-center justify-between transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="font-bold text-sm text-slate-900 group-hover:text-[#0B3B24] block leading-tight transition-colors">
+                        Change Password
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Modifier mon mot de passe & sécurité
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-slate-700 transition-all shrink-0" />
+                </button>
+
+                {/* 6. Change Language */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('language')}
+                  className="w-full p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 flex items-center justify-between transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-pink-100 text-pink-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                      <Languages className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="font-bold text-sm text-slate-900 group-hover:text-[#0B3B24] block leading-tight transition-colors">
+                        Change Language
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Français, English, Espagnol...
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-slate-700 transition-all shrink-0" />
+                </button>
+
+                {/* 7. Abonnements & Tarifs Afrodelicious+ */}
+                {onOpenPricing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenPricing();
+                    }}
+                    className="w-full p-2.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-transparent hover:from-amber-500/20 hover:to-orange-500/20 border border-amber-200/80 flex items-center justify-between transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-[#FF4E27] text-white flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+                        <Crown className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-sm text-slate-900 group-hover:text-[#FF4E27] block leading-tight transition-colors">
+                            Abonnements & Tarifs VIP
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 text-[9px] font-black uppercase">
+                            {currentUser.isPlusMember ? 'Actif ★' : 'Afrodelicious+'}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500">
+                          Formule Découverte, Gourmet+ ou Club VIP
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-amber-600 group-hover:translate-x-1 transition-all shrink-0" />
+                  </button>
+                )}
+              </div>
+
+              {/* ======================================================== */}
+              {/* AUTHENTICATION ACTION BUTTONS: CONNEXION & DÉCONNEXION  */}
+              {/* ======================================================== */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Session Utilisateur
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono truncate max-w-[180px]">
+                    {currentUser.email || currentUser.handle}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Bouton Connexion / Changer de compte */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('auth')}
+                    className="w-full min-h-[46px] py-2.5 px-3 rounded-2xl bg-gradient-to-r from-[#FF4E27] to-[#FF7849] hover:from-[#E03814] hover:to-[#E5653A] text-white font-bold text-xs shadow-md shadow-[#FF4E27]/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span className="truncate font-black">Compte & Sécurité</span>
+                  </button>
+
+                  {/* Bouton Déconnexion */}
+                  <button
+                    type="button"
+                    onClick={handleSignOutClick}
+                    disabled={isSigningOut}
+                    className="w-full min-h-[46px] py-2.5 px-3 rounded-2xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200/80 hover:border-rose-200 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-60"
+                  >
+                    {isSigningOut ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <LogOut className="w-4 h-4 shrink-0" />}
+                    <span className="truncate font-black">Déconnexion</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-view: Profile View */}
+          {activeTab === 'profile' && (
+            <div className="space-y-6">
             
             {/* User Hero Banner (Elevated with Warm Ambient Gradient & Welcome Back Kicker) */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-orange-50/80 via-white to-amber-50/50 p-5 sm:p-6 border border-orange-200/80 shadow-[0_8px_25px_rgba(255,78,39,0.08)]">
@@ -609,16 +948,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                         </button>
                       </>
                     )}
-                    {currentUser.role === 'chef' && (
-                      <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#FF4E27] to-[#FF7849] text-white text-[10px] font-black flex items-center gap-1 shadow-xs">
-                        <ChefHat className="w-3.5 h-3.5" />
-                        <span>Cheffe Certifiée</span>
-                      </span>
-                    )}
                     {currentUser.role === 'admin' && (
                       <span className="px-3 py-1 rounded-full bg-[#0F3E2E] text-white text-[10px] font-black flex items-center gap-1 shadow-xs">
                         <ShieldCheck className="w-3.5 h-3.5" />
                         <span>Administrateur</span>
+                      </span>
+                    )}
+                    {currentUser.role === 'chef' && (
+                      <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#FF4E27] to-[#FF7849] text-white text-[10px] font-black flex items-center gap-1 shadow-xs">
+                        <ChefHat className="w-3.5 h-3.5" />
+                        <span>Cheffe Certifiée</span>
                       </span>
                     )}
                     {/* Active Culinary Badge Chip */}
@@ -1038,73 +1377,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Legal Information & Feedback Section */}
-            <div className="pt-5 border-t border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-[#0F3E2E]" />
-                  <span>Legal Information & Conformité</span>
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">RGPD · CGU v2.4</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => openLegalTab('terms')}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 flex items-center gap-2 group"
-                >
-                  <FileText className="w-4 h-4 text-slate-400 group-hover:text-[#FF4E27]" />
-                  <span className="truncate">Terms of use</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openLegalTab('privacy')}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 flex items-center gap-2 group"
-                >
-                  <Lock className="w-4 h-4 text-slate-400 group-hover:text-[#0F3E2E]" />
-                  <span className="truncate">Private Policy</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openLegalTab('cgu')}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 flex items-center gap-2 group"
-                >
-                  <FileText className="w-4 h-4 text-slate-400 group-hover:text-amber-600" />
-                  <span className="truncate">CGU</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openLegalTab('rgpd')}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 flex items-center gap-2 group"
-                >
-                  <ShieldCheck className="w-4 h-4 text-slate-400 group-hover:text-purple-600" />
-                  <span className="truncate">RGPD / GDPR</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openLegalTab('cookies')}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 flex items-center gap-2 group"
-                >
-                  <Cookie className="w-4 h-4 text-slate-400 group-hover:text-amber-500" />
-                  <span className="truncate">COOKIEs</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openLegalTab('feedback')}
-                  className="p-2.5 rounded-xl border border-orange-200 bg-orange-50/60 hover:bg-orange-100 text-left transition-all text-xs font-bold text-[#FF4E27] flex items-center gap-2 group"
-                >
-                  <MessageSquareHeart className="w-4 h-4 text-[#FF4E27]" />
-                  <span className="truncate">Feedback & Avis</span>
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -1876,133 +2148,250 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           </div>
         )}
-        {showReferrals && activeTab === 'referral' && (
-          <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-            {/* Hero Card */}
-            <div className="p-5 rounded-3xl bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border-2 border-orange-200/80 shadow-xs space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#FF4E27] to-[#FF7849] text-white flex items-center justify-center shadow-md shadow-[#FF4E27]/25 shrink-0">
-                  <Gift className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#FF4E27]">
-                      Programme Ambassadeur Culinaire
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-[#0F3E2E] text-[10px] font-bold">
-                      Actif
-                    </span>
+        {/* Sub-view: Refund & Portefeuille AfroWallet */}
+        {showOrders && activeTab === 'refund' && (
+          <div className="space-y-5 animate-in fade-in duration-200">
+            {/* Wallet Balance Hero Card */}
+            <div className="p-5 rounded-3xl bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white shadow-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-500/30 border border-purple-400/40 flex items-center justify-center text-purple-300">
+                    <RotateCcw className="w-5 h-5" />
                   </div>
-                  <h3 className="font-serif font-black text-xl text-slate-900 mt-0.5">
-                    {t.referralTitle}
-                  </h3>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    {t.referralSubtitle}
-                  </p>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-300">
+                      AfroWallet & Portefeuille
+                    </span>
+                    <h4 className="font-serif font-black text-base text-white">
+                      Solde Remboursable
+                    </h4>
+                  </div>
                 </div>
-              </div>
-
-              {/* Unique Referral Code Block */}
-              <div className="p-4 rounded-2xl bg-white border border-orange-200/80 shadow-2xs space-y-3">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                  {t.referralYourCode}
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                  Garantie 100%
                 </span>
-
-                <div className="flex flex-col sm:flex-row items-center gap-2">
-                  <div className="w-full sm:flex-1 px-4 py-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between font-mono font-black text-base sm:text-lg text-slate-900 tracking-wider">
-                    <span>{referralCode}</span>
-                    <button
-                      onClick={handleCopyCode}
-                      className="text-xs font-sans font-bold text-[#FF4E27] hover:underline flex items-center gap-1 ml-2"
-                    >
-                      {hasCopiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                      <span>{hasCopiedCode ? t.referralCodeCopied : t.referralCopyCode}</span>
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={handleShareWhatsApp}
-                    className="w-full sm:w-auto px-4 py-3 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs shrink-0"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span>WhatsApp</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                  <span className="text-slate-500 text-[11px] truncate">
-                    {referralLink}
-                  </span>
-                  <button
-                    onClick={handleCopyLink}
-                    className="text-[11px] font-bold text-slate-700 hover:text-slate-900 underline shrink-0 ml-2"
-                  >
-                    {hasCopiedLink ? 'Lien copié ✓' : 'Copier le lien'}
-                  </button>
-                </div>
               </div>
 
-              {/* 3 Metric Counters */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    {t.referralFriendsCount}
+              <div className="pt-2 border-t border-white/10 flex items-baseline justify-between">
+                <div>
+                  <span className="text-3xl font-black font-mono text-white tracking-tight">
+                    145.50 €
                   </span>
-                  <span className="font-mono font-black text-2xl text-slate-900 mt-1 block">5</span>
-                  <span className="text-[10px] text-emerald-600 font-bold">Amis actifs</span>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    {t.referralEarnings}
-                  </span>
-                  <span className="font-mono font-black text-2xl text-[#FF4E27] mt-1 block">50 €</span>
-                  <span className="text-[10px] text-slate-500 font-medium">À valoir sur masterclasses</span>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    {t.referralNextReward}
-                  </span>
-                  <span className="font-mono font-black text-lg text-[#0F3E2E] mt-1 block">5 / 10</span>
-                  <span className="text-[10px] text-slate-500 font-medium">5 restants pour cours offert</span>
-                </div>
-              </div>
-
-              {/* Progress towards Next Reward */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{t.referralNextRewardDesc}</span>
-                  </span>
-                  <span className="text-[#FF4E27] font-mono">50%</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-[#FF4E27] to-[#F59E0B]" style={{ width: '50%' }} />
+                  <span className="text-xs text-purple-200 ml-2">disponible pour retrait ou commande</span>
                 </div>
               </div>
             </div>
 
-            {/* How It Works Steps */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-                {t.referralHowItWorks}
-              </span>
-              <div className="space-y-2 text-xs text-slate-700">
-                <p className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#FF4E27]/10 text-[#FF4E27] font-black flex items-center justify-center shrink-0">1</span>
-                  <span>{t.referralStep1}</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#FF4E27]/10 text-[#FF4E27] font-black flex items-center justify-center shrink-0">2</span>
-                  <span>{t.referralStep2}</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#FF4E27]/10 text-[#FF4E27] font-black flex items-center justify-center shrink-0">3</span>
-                  <span>{t.referralStep3}</span>
-                </p>
+            {/* Refund Success Notice */}
+            {refundSuccessNotice && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center justify-between">
+                <span>{refundSuccessNotice}</span>
+                <button type="button" onClick={() => setRefundSuccessNotice(null)} className="p-1 text-emerald-600 hover:text-emerald-800">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
+            )}
+
+            {/* Refund Request Form */}
+            <div className="p-4 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <h5 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-[#FF4E27]" />
+                <span>Demander un remboursement</span>
+              </h5>
+              <p className="text-xs text-slate-500">
+                Vous bénéficiez d'une garantie de satisfaction intégrale sous 14 jours pour toute commande ou atelier annulé.
+              </p>
+
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Commande concernée :</label>
+                  <select
+                    value={refundOrderId}
+                    onChange={(e) => setRefundOrderId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30"
+                  >
+                    {ordersList.map(o => (
+                      <option key={o.id} value={o.id}>
+                        #{o.id} · {o.restaurantName} ({o.total.toFixed(2)} €) - {o.createdAt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Motif de la demande :</label>
+                  <select
+                    value={refundReason}
+                    onChange={(e) => setRefundReason(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30"
+                  >
+                    <option value="dish_quality">Qualité non conforme aux attentes</option>
+                    <option value="delivery_delay">Retard excessif de livraison (+30 min)</option>
+                    <option value="missing_item">Plat ou option manquant dans le colis</option>
+                    <option value="cancelled_class">Cours en ligne annulé par le chef</option>
+                    <option value="other">Autre motif légitime</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Commentaire explicatif (facultatif) :</label>
+                  <textarea
+                    rows={2}
+                    value={refundNotes}
+                    onChange={(e) => setRefundNotes(e.target.value)}
+                    placeholder="Précisez votre situation pour un traitement accéléré en moins de 2h..."
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRefundSuccessNotice(`Votre demande pour la commande #${refundOrderId} a été enregistrée. Remboursement automatique sous 24h sur votre moyen de paiement.`);
+                    setRefundNotes('');
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4 text-purple-400" />
+                  <span>Envoyer la demande de remboursement</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sub-view: Change Password & Security */}
+        {activeTab === 'password' && (
+          <div className="space-y-5 animate-in fade-in duration-200">
+            <div className="p-4 rounded-3xl bg-orange-50 border border-orange-200/80 space-y-1">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-[#FF4E27]" />
+                <h5 className="font-serif font-black text-sm text-slate-900">
+                  Modifier votre Mot de Passe
+                </h5>
+              </div>
+              <p className="text-xs text-slate-600">
+                Protégez votre compte Afrodelicious avec un mot de passe robuste d'au moins 8 caractères.
+              </p>
+            </div>
+
+            {passwordFeedback && (
+              <div
+                role={passwordFeedback.type === 'error' ? 'alert' : 'status'}
+                className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 ${
+                  passwordFeedback.type === 'error'
+                    ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                    : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  {passwordFeedback.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                  <span>{passwordFeedback.message}</span>
+                </span>
+                <button type="button" onClick={() => setPasswordFeedback(null)} className="p-1 opacity-70 hover:opacity-100" aria-label="Fermer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-3.5" noValidate>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Nouveau mot de passe :</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    placeholder="Minimum 8 caractères"
+                    className="w-full p-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Confirmer le nouveau mot de passe :</label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  placeholder="Répétez le mot de passe"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FF4E27]/30"
+                />
+              </div>
+
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500 space-y-1">
+                <span className="font-bold text-slate-700 block">Recommandations de sécurité :</span>
+                <p>• Incluez au moins une majuscule et un chiffre.</p>
+                <p>• Ne réutilisez pas le mot de passe d'une autre application.</p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isUpdatingPassword}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#FF4E27] hover:bg-[#E03814] text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {isUpdatingPassword && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>Sauvegarder le nouveau mot de passe</span>
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Sub-view: Change Language */}
+        {activeTab === 'language' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="p-4 rounded-3xl bg-pink-50 border border-pink-200/80 space-y-1">
+              <div className="flex items-center gap-2">
+                <Languages className="w-4 h-4 text-pink-600" />
+                <h5 className="font-serif font-black text-sm text-slate-900">
+                  Langue de l'application
+                </h5>
+              </div>
+              <p className="text-xs text-slate-600">
+                Sélectionnez votre langue d'affichage préférée. Tous les contenus, recettes et filtres s'adapteront.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              {SUPPORTED_LANGUAGES.map((lang) => {
+                const isSelected = language === lang.code;
+                return (
+                  <button
+                    key={lang.code}
+                    type="button"
+                    onClick={() => {
+                      onChangeLanguage?.(lang.code);
+                      setActiveTab('overview');
+                    }}
+                    className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-orange-50 border-[#FF4E27] text-[#FF4E27] font-bold shadow-2xs'
+                        : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl leading-none">{lang.flag}</span>
+                      <div>
+                        <span className="text-xs font-bold block">{lang.nativeName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono uppercase">{lang.code}</span>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2 className="w-4 h-4 text-[#FF4E27]" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2224,7 +2613,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Tab: Account & security (Supabase Auth) */}
         {activeTab === 'auth' && (
-          <div className="p-5 sm:p-7 space-y-6 max-h-[75vh] overflow-y-auto bg-gradient-to-b from-orange-50/30 via-white to-amber-50/20">
+          <div className="space-y-5 animate-in fade-in duration-200">
 
             <div className="flex flex-col items-center justify-center text-center space-y-3 pt-1">
               <div className="relative flex items-center justify-center p-3 rounded-3xl bg-white/95 border border-orange-200/80 shadow-[0_8px_30px_rgba(255,78,39,0.12)]">
@@ -2248,66 +2637,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
 
             {/* Change password */}
-            <form onSubmit={handleChangePassword} className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3" noValidate>
-              <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveTab('password')}
+              className="w-full p-3 rounded-2xl bg-white border border-slate-200 hover:border-orange-200 hover:bg-orange-50/40 flex items-center justify-between text-left transition-all cursor-pointer group"
+            >
+              <span className="flex items-center gap-2 text-xs font-black text-slate-900">
                 <KeyRound className="w-3.5 h-3.5 text-[#FF4E27]" />
                 <span>Modifier mon mot de passe</span>
-              </h4>
-
-              {passwordFeedback && (
-                <div
-                  role={passwordFeedback.type === 'error' ? 'alert' : 'status'}
-                  className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                    passwordFeedback.type === 'error' ? 'bg-rose-50 border border-rose-200 text-rose-800' : 'bg-emerald-500 text-white'
-                  }`}
-                >
-                  {passwordFeedback.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
-                  <span>{passwordFeedback.message}</span>
-                </div>
-              )}
-
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  aria-label="Nouveau mot de passe"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Nouveau mot de passe"
-                  className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 text-xs focus:border-[#FF4E27] focus:outline-none bg-slate-50/50 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  aria-label="Confirmer le nouveau mot de passe"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  placeholder="Confirmer le nouveau mot de passe"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs focus:border-[#FF4E27] focus:outline-none bg-slate-50/50 font-mono"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400">8 caractères minimum, avec au moins une lettre et un chiffre.</p>
-              <button
-                type="submit"
-                disabled={isUpdatingPassword}
-                className="w-full py-2.5 rounded-2xl bg-slate-900 hover:bg-black text-white text-xs font-black transition-all disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isUpdatingPassword && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Mettre à jour le mot de passe</span>
-              </button>
-            </form>
+              </span>
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+            </button>
 
             {/* Sign out */}
             <button
@@ -2332,6 +2672,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
         )}
 
+        {/* End of white curved bottom sheet */}
+        </div>
+
+      {/* End of modal container */}
       </div>
 
       {/* Badges Progression & Criteria Modal */}

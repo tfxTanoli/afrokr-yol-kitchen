@@ -16,13 +16,39 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Video,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Recipe, Ingredient, RecipeStep, User } from '../types';
 import { AfroIngredientsPicker } from './AfroIngredientsPicker';
 import { AfroIngredient, searchAfroIngredients } from '../data/afroCaribbeanIngredients';
-import { RecipeInput, uploadRecipeImage } from '../services/recipeService';
+import { RecipeInput, uploadRecipeImage, uploadRecipeStepMedia, MAX_STEP_VIDEO_SECONDS } from '../services/recipeService';
 import { toUserMessage } from '../lib/supabase';
+
+const SAMPLE_STEP_MEDIA = [
+  { type: 'video' as const, label: 'Vidéo Éminçage (18s)', url: 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-chef-cutting-onion-43091-large.mp4', duration: 18 },
+  { type: 'video' as const, label: 'Vidéo Saisie au Wok (24s)', url: 'https://assets.mixkit.co/videos/preview/mixkit-chef-cooking-vegetables-in-a-pan-43093-large.mp4', duration: 24 },
+  { type: 'photo' as const, label: 'Photo Marinade épicée', url: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80' },
+  { type: 'photo' as const, label: 'Photo Cuisson feu vif', url: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80' }
+];
+
+/** Reads a local video's length (seconds) before uploading it; NaN when the browser cannot tell. */
+const readVideoDuration = (file: File) =>
+  new Promise<number>((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(NaN);
+    };
+    video.src = url;
+  });
 
 interface CreateRecipeModalProps {
   isOpen: boolean;
@@ -101,6 +127,10 @@ export const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({
   const [imageError, setImageError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Step photo / video (max 30 s) uploads
+  const [uploadingStepIdx, setUploadingStepIdx] = useState<number | null>(null);
+  const [stepMediaError, setStepMediaError] = useState<{ idx: number; message: string } | null>(null);
 
   // Dynamic ingredients
   const [ingredients, setIngredients] = useState<Ingredient[]>(initialRecipe?.ingredients.length ? initialRecipe.ingredients : [
@@ -183,6 +213,58 @@ export const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({
     setSteps(updated);
   };
 
+  const updateStepMedia = (stepIdx: number, media: Pick<RecipeStep, 'mediaType' | 'mediaUrl' | 'videoDurationSeconds'>) => {
+    setSteps(prev => prev.map((s, i) => (i === stepIdx ? { ...s, ...media } : s)));
+  };
+
+  // Step media are uploaded to Supabase Storage right away, like the main photo
+  const handleStepMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, stepIdx: number) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || uploadingStepIdx !== null) return;
+    setStepMediaError(null);
+
+    let duration: number | undefined;
+    if (file.type.startsWith('video')) {
+      const seconds = await readVideoDuration(file);
+      if (Number.isFinite(seconds) && seconds > MAX_STEP_VIDEO_SECONDS + 0.5) {
+        setStepMediaError({
+          idx: stepIdx,
+          message: `Cette vidéo dure ${Math.round(seconds)} s : les vidéos de préparation sont limitées à ${MAX_STEP_VIDEO_SECONDS} secondes.`
+        });
+        return;
+      }
+      duration = Number.isFinite(seconds) ? Math.max(1, Math.round(seconds)) : undefined;
+    }
+
+    setUploadingStepIdx(stepIdx);
+    try {
+      const { mediaType, url } = await uploadRecipeStepMedia(file);
+      updateStepMedia(stepIdx, {
+        mediaType,
+        mediaUrl: url,
+        videoDurationSeconds: mediaType === 'video' ? duration : undefined
+      });
+    } catch (error) {
+      setStepMediaError({ idx: stepIdx, message: toUserMessage(error, 'Le téléversement du média a échoué.') });
+    } finally {
+      setUploadingStepIdx(null);
+    }
+  };
+
+  const handleSelectPresetStepMedia = (stepIdx: number, sample: typeof SAMPLE_STEP_MEDIA[number]) => {
+    setStepMediaError(null);
+    updateStepMedia(stepIdx, {
+      mediaType: sample.type,
+      mediaUrl: sample.url,
+      videoDurationSeconds: 'duration' in sample ? sample.duration : undefined
+    });
+  };
+
+  const handleRemoveStepMedia = (stepIdx: number) => {
+    updateStepMedia(stepIdx, { mediaType: undefined, mediaUrl: undefined, videoDurationSeconds: undefined });
+  };
+
   // Photos are uploaded to Supabase Storage right away; the form stores the public URL
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -205,7 +287,7 @@ export const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting || isUploadingImage) return;
+    if (isSubmitting || isUploadingImage || uploadingStepIdx !== null) return;
     setSubmitError(null);
 
     if (title.trim().length < 3) {
@@ -779,6 +861,101 @@ export const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({
                     placeholder="Astuce de grand-mère ou du chef (optionnel)"
                     className="w-full px-3 py-1 rounded-lg border border-slate-200 focus:border-[#FF4E27] text-[11px] italic bg-white"
                   />
+
+                  {/* Step Photo or Video (Max 30s) */}
+                  <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                        <Video className="w-3.5 h-3.5 text-[#FF4E27]" />
+                        <span>Média de préparation (Photo ou Vidéo max 30 sec)</span>
+                      </span>
+                      {st.mediaUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStepMedia(idx)}
+                          className="text-[10px] text-rose-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Retirer média</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {st.mediaUrl ? (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 p-1.5">
+                        {st.mediaType === 'video' ? (
+                          <div className="space-y-1">
+                            <video
+                              src={st.mediaUrl}
+                              controls
+                              playsInline
+                              className="w-full max-h-48 rounded-lg object-contain bg-black"
+                            />
+                            <div className="flex items-center justify-between px-2 py-0.5 text-[10px] text-slate-300">
+                              <span className="flex items-center gap-1 font-bold text-emerald-400">
+                                <Check className="w-3 h-3" />
+                                Vidéo de l'étape ({st.videoDurationSeconds || MAX_STEP_VIDEO_SECONDS}s max)
+                              </span>
+                              <span className="font-mono text-slate-400">Max 30s respecté</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="relative h-36 w-full rounded-lg overflow-hidden">
+                            <img
+                              src={st.mediaUrl}
+                              alt={`Étape ${st.stepNumber}`}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-bold flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3 text-emerald-400" />
+                              <span>Photo de l'étape</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-orange-50 hover:border-[#FF4E27] text-slate-700 text-xs font-semibold transition-all shadow-2xs ${
+                            uploadingStepIdx !== null ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                          }`}>
+                            {uploadingStepIdx === idx
+                              ? <Loader2 className="w-3.5 h-3.5 text-[#FF4E27] animate-spin" />
+                              : <Camera className="w-3.5 h-3.5 text-[#FF4E27]" />}
+                            <span>{uploadingStepIdx === idx ? 'Téléversement…' : 'Ajouter Photo ou Vidéo'}</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+                              onChange={(e) => handleStepMediaUpload(e, idx)}
+                              disabled={uploadingStepIdx !== null}
+                              className="hidden"
+                            />
+                          </label>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            Photos (5 Mo) ou courtes vidéos de 30s maximum (25 Mo)
+                          </span>
+                        </div>
+
+                        {/* Presets library */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] font-semibold text-slate-400">Exemples rapides :</span>
+                          {SAMPLE_STEP_MEDIA.map((smp, sIdx) => (
+                            <button
+                              key={sIdx}
+                              type="button"
+                              onClick={() => handleSelectPresetStepMedia(idx, smp)}
+                              className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 hover:border-[#FF4E27] text-[10px] font-medium text-slate-600 hover:text-[#FF4E27] transition-colors cursor-pointer"
+                            >
+                              {smp.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {stepMediaError?.idx === idx && (
+                      <p role="alert" className="text-[11px] font-bold text-rose-600">{stepMediaError.message}</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -833,7 +1010,7 @@ export const CreateRecipeModal: React.FC<CreateRecipeModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isUploadingImage}
+              disabled={isSubmitting || isUploadingImage || uploadingStepIdx !== null}
               className="px-6 py-2.5 rounded-xl bg-[#FF4E27] hover:bg-[#E03814] text-white text-xs font-bold shadow-md shadow-[#FF4E27]/25 hover:scale-[1.02] transition-all disabled:opacity-60 disabled:hover:scale-100 flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

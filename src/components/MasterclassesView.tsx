@@ -30,6 +30,7 @@ import { PaymentGatewayModal, DEFAULT_PAYMENT_CONFIG, PaymentGatewayConfig } fro
 import { AdBanner } from './AdBanner';
 import { FollowButton } from './FollowButton';
 import { ShareableItem } from './ShareModal';
+import { getCountryFlag, formatCountryWithFlag } from '../utils/countryFlags';
 
 interface MasterclassesViewProps {
   courses: Course[];
@@ -42,7 +43,23 @@ interface MasterclassesViewProps {
   onAddCourse?: (course: Course) => void;
 }
 
-type CategoryTab = 'All' | 'Foods' | 'Fun' | 'Class' | 'Other';
+export const COOKING_CLASS_CATEGORIES = [
+  'All',
+  'Main courses',
+  'Entree',
+  'Cuisine',
+  'Dishes',
+  'Deserts',
+  'Baking',
+  'Kids',
+  'Beverages',
+  'Appetizes',
+  'Salad',
+  'Breakfast',
+  'Soups & Stews'
+] as const;
+
+export type CategoryTab = typeof COOKING_CLASS_CATEGORIES[number];
 type PriceFilter = 'all' | 'free' | 'paid';
 type ViewMode = 'grid' | 'list';
 
@@ -78,7 +95,7 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<CategoryTab>('Foods');
+  const [activeCategory, setActiveCategory] = useState<CategoryTab>('All');
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
@@ -86,7 +103,7 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newSubtitle, setNewSubtitle] = useState('');
-  const [newCategory, setNewCategory] = useState<'Foods' | 'Fun' | 'Class' | 'Other'>('Foods');
+  const [newCategory, setNewCategory] = useState<Exclude<CategoryTab, 'All'>>('Main courses');
   const [newCountry, setNewCountry] = useState('Cameroun');
   const [newCountryFlag, setNewCountryFlag] = useState('🇨🇲');
   const [newDurationLabel, setNewDurationLabel] = useState('01 Week');
@@ -116,10 +133,19 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
         if (!matchesQuery) return false;
       }
 
-      // Category filter
+      // Category filter (Exact or content match)
       if (activeCategory !== 'All') {
-        const courseCategory = course.category || 'Foods';
-        if (courseCategory !== activeCategory) return false;
+        const cat = (course.category || '').toLowerCase();
+        const target = activeCategory.toLowerCase();
+        const matchesCategory = 
+          cat === target ||
+          cat.includes(target) ||
+          target.includes(cat) ||
+          course.title.toLowerCase().includes(target) ||
+          course.subtitle.toLowerCase().includes(target) ||
+          (course.description && course.description.toLowerCase().includes(target)) ||
+          (course.learningOutcomes && course.learningOutcomes.some(o => o.toLowerCase().includes(target)));
+        if (!matchesCategory) return false;
       }
 
       // Price filter (Free vs Paid)
@@ -265,18 +291,17 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
       {/* TOP HERO BANNER (Directly matching the reference image kitchen banner) */}
       <div className="relative rounded-3xl overflow-hidden shadow-md border border-slate-200/80 bg-stone-900">
         <div className="relative h-64 sm:h-80 md:h-96 w-full overflow-hidden">
-          {/* Kitchen photo background matching user mockup */}
+          {/* Kitchen photo background matching user attachment */}
           <img
-            src="/assets/aistudio/cours_de_cuisne_en_ligne_3_558e1de2.png"
-            alt="Cours de cuisine en ligne"
+            src="/assets/aistudio/OYH_cooking-classes_a7f97752.jpg"
+            alt="Online Cooking Classes - Ateliers Culinaires, Dégustations & Balades Gourmandes"
             className="w-full h-full object-cover object-center brightness-95"
             onError={(e) => {
-              // Fallback if local asset is loading
               (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=1200&auto=format&fit=crop&q=80';
             }}
           />
-          {/* Subtle warm gradient scrim */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
+          {/* Warm luminous gradient scrim */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/40 to-black/20" />
 
           {/* Top Bar inside Hero */}
           <div className="absolute top-4 sm:top-6 left-4 sm:left-8 right-4 sm:right-8 flex items-center justify-between">
@@ -316,13 +341,13 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
           <div className="absolute bottom-6 sm:bottom-8 left-4 sm:left-8 right-4 sm:right-8 text-white space-y-2 max-w-2xl">
             <div className="flex items-center gap-2 text-xs font-semibold text-[#00C9A7] tracking-wider uppercase">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Masterclasses & Ateliers Culinaires En Ligne</span>
+              <span>Online Cooking Classes · Ateliers Culinaires En Ligne</span>
             </div>
             <h1 className="font-serif font-black text-2xl sm:text-4xl text-white leading-tight drop-shadow-md">
-              Cuisinez en direct avec les plus grands Chefs d'Afrique & des Caraïbes
+              Ateliers Culinaires, Dégustations & Balades Gourmandes
             </h1>
-            <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 font-normal max-w-xl drop-shadow-xs">
-              Apprenez les gestes ancestraux, les secrets des sauces et le dosage précis des épices. Choisissez des sessions 100% gratuites ou monétisées.
+            <p className="text-xs sm:text-sm text-slate-100 line-clamp-2 font-normal max-w-xl drop-shadow-xs">
+              Rencontrez des hôtes et des chefs passionnés, cuisinez des recettes emblématiques, dégustez des cépages et rhums rares ou partez en safari street food à travers les terroirs du monde.
             </p>
           </div>
         </div>
@@ -431,27 +456,27 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
 
         </div>
 
-        {/* Category Tabs: Foods, Fun, Class, Other (Directly matching mockups) */}
+        {/* Category Tabs: All, Main courses, Entree, Cuisine, Dishes, Deserts, Baking, Kids, Beverages, Appetizes, Salad, Breakfast, Soups & Stews */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {(['Foods', 'Fun', 'Class', 'Other', 'All'] as CategoryTab[]).map((tab) => {
+          {COOKING_CLASS_CATEGORIES.map((tab) => {
             const isActive = activeCategory === tab;
             return (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setActiveCategory(tab)}
-                className={`px-5 py-2 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   isActive
                     ? 'bg-[#00C9A7] text-slate-900 shadow-sm shadow-[#00C9A7]/20 ring-1 ring-[#00C9A7]'
                     : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
-                {tab === 'All' ? 'Tous les cours' : tab}
+                {tab === 'All' ? 'All (Tous)' : tab}
               </button>
             );
           })}
 
-          <div className="ml-auto text-xs text-slate-500 font-medium whitespace-nowrap">
+          <div className="ml-auto text-xs text-slate-500 font-medium whitespace-nowrap shrink-0">
             {filteredCourses.length} classe{filteredCourses.length > 1 ? 's' : ''} disponible{filteredCourses.length > 1 ? 's' : ''}
           </div>
         </div>
@@ -475,7 +500,7 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
             type="button"
             onClick={() => {
               setSearchQuery('');
-              setActiveCategory('Foods');
+              setActiveCategory('All');
               setPriceFilter('all');
             }}
             className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold"
@@ -530,7 +555,7 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
                   {/* Bottom Image Info */}
                   <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs">
                     <div className="flex items-center gap-1 font-bold">
-                      <span>{course.countryFlag || '🌍'}</span>
+                      <span>{course.countryFlag || getCountryFlag(course.country || course.chefCountry)}</span>
                       <span>{course.country || course.chefCountry}</span>
                     </div>
                     {course.scheduleDate && (
@@ -671,10 +696,10 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
-                      {course.category || 'Foods'}
+                      {course.category || 'Dishes'}
                     </span>
                     <span className="text-xs text-slate-500 font-medium">
-                      {course.countryFlag} {course.country || course.chefCountry}
+                      {course.countryFlag || getCountryFlag(course.country || course.chefCountry)} {course.country || course.chefCountry}
                     </span>
                   </div>
 
@@ -854,10 +879,9 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
                     onChange={(e) => setNewCategory(e.target.value as any)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-none focus:border-[#00C9A7]"
                   >
-                    <option value="Foods">Foods</option>
-                    <option value="Fun">Fun</option>
-                    <option value="Class">Class</option>
-                    <option value="Other">Other</option>
+                    {COOKING_CLASS_CATEGORIES.filter(c => c !== 'All').map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -867,7 +891,11 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
                     <input
                       type="text"
                       value={newCountry}
-                      onChange={(e) => setNewCountry(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewCountry(val);
+                        setNewCountryFlag(getCountryFlag(val));
+                      }}
                       placeholder="Cameroun"
                       className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-[#00C9A7]"
                     />
@@ -877,6 +905,7 @@ export const MasterclassesView: React.FC<MasterclassesViewProps> = ({
                       onChange={(e) => setNewCountryFlag(e.target.value)}
                       placeholder="🇨🇲"
                       className="w-12 text-center px-1 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#00C9A7]"
+                      title="Drapeau du pays"
                     />
                   </div>
                 </div>

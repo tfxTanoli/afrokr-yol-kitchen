@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Heart, 
   MessageCircle, 
@@ -33,6 +33,7 @@ import { SupportedLanguage, TRANSLATIONS } from '../i18n/translations';
 import { AdBanner } from './AdBanner';
 import { FollowButton } from './FollowButton';
 import { ShareableItem } from './ShareModal';
+import { getCountryFlag } from '../utils/countryFlags';
 
 interface FeedViewProps {
   recipes: Recipe[];
@@ -98,7 +99,16 @@ export const FeedView: React.FC<FeedViewProps> = ({
   language = 'fr'
 }) => {
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [feedMode, setFeedMode] = useState<'for_you' | 'following' | 'chronological'>('for_you');
   const [copiedToast, setCopiedToast] = useState(false);
+  const [animatingLikeId, setAnimatingLikeId] = useState<string | null>(null);
+  const [animatingSavedId, setAnimatingSavedId] = useState<string | null>(null);
+  const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
+  // A single tap on a cover opens the recipe only once we know it is not a double tap
+  const coverTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (coverTapTimerRef.current) clearTimeout(coverTapTimerRef.current);
+  }, []);
   const trendingSliderRef = useRef<HTMLDivElement>(null);
   const quickSliderRef = useRef<HTMLDivElement>(null);
   const chefsSliderRef = useRef<HTMLDivElement>(null);
@@ -116,7 +126,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
         authorName: recipe.authorName,
         authorHandle: recipe.authorHandle,
         country: recipe.country,
-        countryFlag: recipe.countryFlag,
+        countryFlag: recipe.countryFlag || getCountryFlag(recipe.country),
         prepTime: `${recipe.prepTimeMinutes + recipe.cookTimeMinutes} min`,
         difficulty: recipe.difficulty,
         ingredientsCount: recipe.ingredients.length,
@@ -126,6 +136,32 @@ export const FeedView: React.FC<FeedViewProps> = ({
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
     }
+  };
+
+  const handleLikeWithAnimation = (recipeId: string) => {
+    setAnimatingLikeId(recipeId);
+    onToggleLike(recipeId);
+    setTimeout(() => {
+      setAnimatingLikeId(curr => curr === recipeId ? null : curr);
+    }, 600);
+  };
+
+  const handleBookmarkWithAnimation = (recipeId: string) => {
+    setAnimatingSavedId(recipeId);
+    onToggleBookmark(recipeId);
+    setTimeout(() => {
+      setAnimatingSavedId(curr => curr === recipeId ? null : curr);
+    }, 600);
+  };
+
+  const handleDoubleTapLike = (recipe: Recipe) => {
+    setDoubleTapHeartId(recipe.id);
+    if (!recipe.isLiked) {
+      onToggleLike(recipe.id);
+    }
+    setTimeout(() => {
+      setDoubleTapHeartId(curr => curr === recipe.id ? null : curr);
+    }, 850);
   };
 
   const scrollTrending = (dir: 'left' | 'right') => {
@@ -148,7 +184,79 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   // Filter recipes by selected category (applies to the sliders and the feed below)
   const isAllCategories = !selectedCategory || selectedCategory === 'all';
-  const filteredRecipes = recipes.filter(r => recipeMatchesCategory(r, selectedCategory));
+  const categoryRecipes = useMemo(
+    () => recipes.filter(r => recipeMatchesCategory(r, selectedCategory)),
+    [recipes, selectedCategory]
+  );
+
+  // Ranking: non-chronological sorting based on interests, interactions & relationships
+  const computeRecipeScore = (r: Recipe): number => {
+    let score = 0;
+    const country = (r.country || '').toLowerCase();
+    const category = (r.category || '').toLowerCase();
+    const title = (r.title || '').toLowerCase();
+
+    // 1. Author relation & user's own publications
+    if (r.authorId === currentUser.id) {
+      score += 150; // User's own recipes appear right at the top
+    } else if (followedUserIds.includes(r.authorId)) {
+      score += 55; // Creators the user follows
+    }
+
+    // 2. Past user interactions
+    if (r.isBookmarked) score += 45; // High culinary intent
+    if (r.isLiked) score += 30; // Direct positive engagement
+
+    // 3. Affinity with user preferences (cuisines, specialties, country)
+    if (currentUser.country && country === currentUser.country.toLowerCase()) {
+      score += 25;
+    }
+    if (currentUser.preferences?.favoriteCuisines?.some(c =>
+      country.includes(c.toLowerCase()) || category.includes(c.toLowerCase())
+    )) {
+      score += 30;
+    }
+    if (currentUser.specialties?.some(s =>
+      title.includes(s.toLowerCase()) || category.includes(s.toLowerCase())
+    )) {
+      score += 25;
+    }
+
+    // 4. Social proof & engagement density
+    score += (r.likesCount || 0) * 1.5;
+    score += (r.commentsCount || 0) * 2.5;
+
+    // 5. Freshness boost
+    const createdAtTime = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+    if (createdAtTime > 0) {
+      const hoursAgo = (Date.now() - createdAtTime) / (1000 * 60 * 60);
+      if (hoursAgo < 24) score += 40;
+      else if (hoursAgo < 72) score += 20;
+    }
+
+    return score;
+  };
+
+  // Main feed: category filter, then the selected mode (For you / Following / Recent)
+  const filteredRecipes = useMemo(() => {
+    const list = categoryRecipes;
+
+    if (feedMode === 'following') {
+      const followingList = list.filter(r => r.authorId === currentUser.id || followedUserIds.includes(r.authorId));
+      return followingList.length > 0 ? followingList : list;
+    }
+
+    if (feedMode === 'chronological') {
+      return [...list].sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+    }
+
+    // Default 'for_you': ranking based on interests & past interactions
+    return [...list].sort((a, b) => computeRecipeScore(b) - computeRecipeScore(a));
+  }, [categoryRecipes, feedMode, currentUser, followedUserIds]);
   const selectedCategoryLabel = t[`cat${selectedCategory.replace(/\s+/g, '')}`] || selectedCategory;
   const categoryText = CATEGORY_RESULT_TEXT[language] ?? CATEGORY_RESULT_TEXT.fr!;
 
@@ -163,6 +271,11 @@ export const FeedView: React.FC<FeedViewProps> = ({
     trendingSliderRef.current?.scrollTo({ left: 0 });
     quickSliderRef.current?.scrollTo({ left: 0 });
   }, [selectedCategory]);
+
+  // Switching feed mode restarts the feed list from the top
+  useEffect(() => {
+    setVisibleCount(4);
+  }, [feedMode]);
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
@@ -182,7 +295,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   }, [visibleCount, isLoadingMore, filteredRecipes.length]);
 
   // Fast recipes for horizontal slide 2
-  const quickRecipes = filteredRecipes.filter(r => (r.prepTimeMinutes + r.cookTimeMinutes) <= 35);
+  const quickRecipes = categoryRecipes.filter(r => (r.prepTimeMinutes + r.cookTimeMinutes) <= 35);
   const displayQuickRecipes = isAllCategories && quickRecipes.length < 3 ? recipes.slice(2, 8) : quickRecipes;
 
   return (
@@ -197,15 +310,60 @@ export const FeedView: React.FC<FeedViewProps> = ({
       )}
 
       {/* Feed Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
         <div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-orange-100 to-amber-100 text-[#FF4E27] font-black text-[10px] uppercase tracking-wider mb-1.5 border border-orange-200/70 shadow-2xs">
+            <Sparkles className="w-3 h-3 text-[#FF4E27]" />
+            <span>Réseau Social Culinaire Collaboratif</span>
+          </div>
           <h1 className="font-serif font-black text-2xl sm:text-3xl text-slate-900 tracking-tight flex items-center gap-2">
             <span>Afrodelicious Feed</span>
             <span className="text-xl">✨</span>
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Plongez au cœur des saveurs d’Afrique et des Caraïbes · Recettes, histoires & partages
+            Recettes collaboratives d'Afrique & des Caraïbes · Tri intelligent selon vos goûts et affinités
           </p>
+        </div>
+
+        {/* Feed Mode Selector */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/80 shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setFeedMode('for_you')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              feedMode === 'for_you'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Publications triées selon vos centres d'intérêt, interactions et affinités"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#FF4E27]" />
+            <span>Pour vous ✨</span>
+          </button>
+
+          <button
+            onClick={() => setFeedMode('following')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              feedMode === 'following'
+                ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Uniquement vos chefs et amis suivis"
+          >
+            <span>Abonnements</span>
+          </button>
+
+          <button
+            onClick={() => setFeedMode('chronological')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              feedMode === 'chronological'
+                ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Ordre strictement chronologique"
+          >
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <span>Récents</span>
+          </button>
         </div>
       </div>
 
@@ -231,9 +389,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
             {!isAllCategories && (
               <div className="flex flex-wrap items-center gap-2 px-1" role="status">
                 <span className="text-xs font-semibold text-slate-600">
-                  {filteredRecipes.length === 0
+                  {categoryRecipes.length === 0
                     ? categoryText.none(selectedCategoryLabel)
-                    : `${categoryText.count(filteredRecipes.length)} · ${selectedCategoryLabel}`}
+                    : `${categoryText.count(categoryRecipes.length)} · ${selectedCategoryLabel}`}
                 </span>
                 <button
                   type="button"
@@ -248,7 +406,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
           </div>
 
           {/* 3. Horizontal Slide 1: Tendances Afro-Caribéennes */}
-          {filteredRecipes.length > 0 && (
+          {categoryRecipes.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
@@ -282,7 +440,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
               className="flex items-stretch gap-4 overflow-x-auto scroll-smooth no-scrollbar py-1 snap-x snap-mandatory"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              {filteredRecipes.slice(0, 6).map((recipe) => (
+              {categoryRecipes.slice(0, 6).map((recipe) => (
                 <div
                   key={`trending-${recipe.id}`}
                   onClick={() => onSelectRecipe(recipe.id)}
@@ -299,7 +457,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     {/* Country and Category tags */}
                     <div className="absolute top-3 left-3 flex items-center gap-1.5">
                       <span className="px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md text-white text-[11px] font-bold border border-white/20">
-                        {recipe.countryFlag} {recipe.country}
+                        {recipe.countryFlag || getCountryFlag(recipe.country)} {recipe.country}
                       </span>
                     </div>
 
@@ -413,7 +571,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     
                     <div className="absolute top-3 left-3 flex items-center gap-1.5">
                       <span className="px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md text-white text-[11px] font-bold border border-white/20">
-                        {recipe.countryFlag} {recipe.country}
+                        {recipe.countryFlag || getCountryFlag(recipe.country)} {recipe.country}
                       </span>
                     </div>
 
@@ -626,7 +784,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
                               <span>{recipe.authorHandle}</span>
                               <span>·</span>
-                              <span>{recipe.countryFlag} {recipe.country}</span>
+                              <span>{recipe.countryFlag || getCountryFlag(recipe.country)} {recipe.country}</span>
                             </div>
                           </div>
                         </div>
@@ -653,16 +811,39 @@ export const FeedView: React.FC<FeedViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Recipe Cover Image */}
+                      {/* Recipe Cover Image (Double-Tap to Like) */}
                       <div 
-                        onClick={() => onSelectRecipe(recipe.id)}
-                        className="relative h-64 sm:h-80 w-full cursor-pointer overflow-hidden group"
+                        onClick={(e) => {
+                          if (e.detail > 1) return; // second click of a double tap
+                          if (coverTapTimerRef.current) clearTimeout(coverTapTimerRef.current);
+                          coverTapTimerRef.current = setTimeout(() => {
+                            coverTapTimerRef.current = null;
+                            onSelectRecipe(recipe.id);
+                          }, 250);
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (coverTapTimerRef.current) {
+                            clearTimeout(coverTapTimerRef.current);
+                            coverTapTimerRef.current = null;
+                          }
+                          handleDoubleTapLike(recipe);
+                        }}
+                        className="relative h-64 sm:h-80 w-full cursor-pointer overflow-hidden group select-none"
                       >
                         <img
                           src={recipe.imageUrl}
                           alt={recipe.title}
                           className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-500"
                         />
+
+                        {/* Floating double-tap heart pop */}
+                        {doubleTapHeartId === recipe.id && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in zoom-in-50 fade-in duration-200">
+                            <Heart className="w-24 h-24 text-white fill-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.6)] animate-bounce" />
+                          </div>
+                        )}
+
                         <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
                           <span className="text-white text-xs font-bold flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl">
                             <span>{t.viewRecipe}</span>
@@ -700,13 +881,25 @@ export const FeedView: React.FC<FeedViewProps> = ({
                         {/* Actions Bar */}
                         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                           <div className="flex items-center gap-4">
+                            {/* Animated Like Button */}
                             <button
-                              onClick={() => onToggleLike(recipe.id)}
-                              className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLikeWithAnimation(recipe.id);
+                              }}
+                              className={`flex items-center gap-1.5 text-xs font-bold transition-all duration-300 cursor-pointer ${
                                 recipe.isLiked ? 'text-[#FF4E27]' : 'text-slate-500 hover:text-[#FF4E27]'
-                              }`}
+                              } ${animatingLikeId === recipe.id ? 'scale-125' : 'hover:scale-105 active:scale-95'}`}
+                              aria-label="J'aime la publication"
                             >
-                              <Heart className={`w-4 h-4 ${recipe.isLiked ? 'fill-[#FF4E27]' : ''}`} />
+                              <div className="relative">
+                                {animatingLikeId === recipe.id && (
+                                  <Heart className="w-4 h-4 fill-[#FF4E27] text-[#FF4E27] absolute inset-0 animate-ping opacity-75" />
+                                )}
+                                <Heart className={`w-4 h-4 transition-transform duration-300 ${
+                                  recipe.isLiked ? 'fill-[#FF4E27]' : ''
+                                } ${animatingLikeId === recipe.id ? 'scale-125' : ''}`} />
+                              </div>
                               <span>{recipe.likesCount}</span>
                             </button>
 
@@ -740,16 +933,23 @@ export const FeedView: React.FC<FeedViewProps> = ({
                               <CalendarPlus className="w-4 h-4" />
                             </button>
 
+                            {/* Animated Saved Button */}
                             <button
-                              onClick={() => onToggleBookmark(recipe.id)}
-                              title="Sauvegarder la recette"
-                              className={`p-2 rounded-xl transition-colors ${
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBookmarkWithAnimation(recipe.id);
+                              }}
+                              title={recipe.isBookmarked ? "Recette enregistrée dans vos collections" : "Sauvegarder la recette"}
+                              className={`p-2 rounded-xl transition-all duration-300 cursor-pointer ${
                                 recipe.isBookmarked 
                                   ? 'text-[#FF4E27] bg-orange-50' 
                                   : 'text-slate-500 hover:bg-slate-100'
-                              }`}
+                              } ${animatingSavedId === recipe.id ? 'scale-125 ring-4 ring-orange-200/80 bg-orange-100 shadow-md' : 'hover:scale-105 active:scale-95'}`}
+                              aria-label="Sauvegarder la recette"
                             >
-                              <Bookmark className={`w-4 h-4 ${recipe.isBookmarked ? 'fill-[#FF4E27]' : ''}`} />
+                              <Bookmark className={`w-4 h-4 transition-transform duration-300 ${
+                                recipe.isBookmarked ? 'fill-[#FF4E27]' : ''
+                              } ${animatingSavedId === recipe.id ? 'scale-115 rotate-6' : ''}`} />
                             </button>
                           </div>
                         </div>

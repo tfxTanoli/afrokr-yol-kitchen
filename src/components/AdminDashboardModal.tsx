@@ -82,6 +82,8 @@ import {
   downloadJsonStats 
 } from '../data/adminData';
 import { MediaCampaignAnalytics } from './MediaCampaignAnalytics';
+import { AdminAdManager } from './AdminAdManager';
+import { AdminPricingManager } from './AdminPricingManager';
 import { 
   MEDIA_CAMPAIGN_ANALYTICS, 
   downloadMediaReportCsv, 
@@ -112,6 +114,7 @@ interface AdminDashboardModalProps {
   onResetFeatureFlags?: () => void;
   onNavigateToTab?: (tabId: string) => void;
   onOpenCreateRecipe?: () => void;
+  onOpenPricing?: () => void;
   language?: SupportedLanguage;
 }
 
@@ -127,6 +130,8 @@ type AdminTab =
   | 'experiences'
   | 'stories'
   | 'media_campaigns'
+  | 'ad_manager'
+  | 'pricing_manager'
   | 'users_roles'
   | 'messaging'
   | 'analytics'
@@ -152,6 +157,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onResetFeatureFlags,
   onNavigateToTab,
   onOpenCreateRecipe,
+  onOpenPricing,
   language = 'fr'
 }) => {
   if (!isOpen) return null;
@@ -716,6 +722,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   { id: 'experiences', label: 'Expériences Culinaires', icon: Utensils, flag: activeFeatureFlags.experiences },
                   { id: 'stories', label: 'Stories Vidéo', icon: Flame, flag: activeFeatureFlags.stories },
                   { id: 'media_campaigns', label: 'Analyses Médias & Pub', icon: Megaphone, badge: '90j' },
+                  { id: 'ad_manager', label: 'Gestionnaire Pubs Multi-Formats', icon: Sparkles, badge: 'Nouveau' },
+                  { id: 'pricing_manager', label: 'Tarifs & Abonnements VIP', icon: Crown, badge: 'Plans' },
                 ].map((item) => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
@@ -1984,6 +1992,33 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               {/* ========================================================== */}
               {activeTab === 'media_campaigns' && (
                 <MediaCampaignAnalytics onExportPdf={handleExportPdfReport} />
+              )}
+
+              {/* ========================================================== */}
+              {/* TAB: AD MANAGER (MULTI-FORMAT CAMPAIGNS ACROSS ALL FEATURES) */}
+              {/* ========================================================== */}
+              {activeTab === 'ad_manager' && (
+                <AdminAdManager onNotify={(msg) => {
+                  setToastNotice(msg);
+                  setTimeout(() => setToastNotice(null), 3500);
+                }} />
+              )}
+
+              {/* ========================================================== */}
+              {/* TAB: PRICING & SUBSCRIPTIONS MANAGER (SUPER ADMIN)         */}
+              {/* ========================================================== */}
+              {activeTab === 'pricing_manager' && (
+                <AdminPricingManager
+                  onNotify={(msg) => {
+                    setToastNotice(msg);
+                    setTimeout(() => setToastNotice(null), 3500);
+                  }}
+                  onPreviewPricing={() => {
+                    if (onOpenPricing) {
+                      onOpenPricing();
+                    }
+                  }}
+                />
               )}
 
               {/* ========================================================== */}

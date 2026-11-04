@@ -26,6 +26,7 @@ import { CreateExperienceModal } from './CreateExperienceModal';
 import { SupportedLanguage } from '../i18n/translations';
 import { FollowButton } from './FollowButton';
 import { ShareableItem } from './ShareModal';
+import { getCountryFlag, formatCountryWithFlag } from '../utils/countryFlags';
 
 interface ExperiencesViewProps {
   experiences: CulinaryExperience[];
@@ -113,20 +114,25 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
       
-      {/* 1. Hero Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-slate-950 text-white border border-slate-800 shadow-2xl p-6 sm:p-10 lg:p-12">
-        <div className="absolute inset-0 opacity-30 mix-blend-overlay pointer-events-none">
+      {/* 1. Hero Banner with attached photo background */}
+      <div className="relative rounded-3xl overflow-hidden text-white border border-slate-700/60 shadow-2xl p-6 sm:p-10 lg:p-12 min-h-[380px] flex items-center bg-slate-900">
+        {/* User attached photo background */}
+        <div className="absolute inset-0 pointer-events-none">
           <img
-            src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600&auto=format&fit=crop&q=80"
-            alt="Culinary background"
-            className="w-full h-full object-cover"
+            src="/assets/aistudio/OYH_cooking-classes_a7f97752.jpg"
+            alt="Ateliers Culinaires, Dégustations & Balades Gourmandes"
+            className="w-full h-full object-cover object-center scale-102 brightness-95 saturate-110"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600&auto=format&fit=crop&q=80';
+            }}
           />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent pointer-events-none" />
+        {/* Soft glass gradient scrim for optimal text legibility while displaying photo clearly */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/50 to-slate-900/20 pointer-events-none" />
 
         <div className="relative z-10 max-w-2xl space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FF4E27]/20 border border-[#FF4E27]/40 text-[#FF7849] text-xs font-bold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FF4E27]/30 backdrop-blur-md border border-[#FF4E27]/50 text-[#FF9E79] text-xs font-black uppercase tracking-wider shadow-sm">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             <span>Expériences Afrodelicious dans le monde</span>
           </div>
 
@@ -225,7 +231,7 @@ export const ExperiencesView: React.FC<ExperiencesViewProps> = ({
               <option value="all">🌍 Tous les pays</option>
               {uniqueCountries.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {formatCountryWithFlag(c)}
                 </option>
               ))}
             </select>
