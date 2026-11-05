@@ -270,7 +270,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                       <UtensilsCrossed className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="text-xs font-black text-slate-900 block">3 400+ Recettes</span>
+                      <span className="text-xs font-black text-slate-900 block">Plus de 80 000 recettes</span>
                       <span className="text-[11px] text-slate-500">Du Thiébou au Colombo</span>
                     </div>
                   </div>
@@ -280,8 +280,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                       <Globe className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="text-xs font-black text-slate-900 block">32 Pays Représentés</span>
-                      <span className="text-[11px] text-slate-500">Afrique de l'Ouest, Centrale & Îles</span>
+                      <span className="text-xs font-black text-slate-900 block">Plus de 90 pays dans le monde</span>
+                      <span className="text-[11px] text-slate-500">Afrique, Caraïbes & diasporas</span>
                     </div>
                   </div>
 
