@@ -9,7 +9,7 @@ React 19 + Vite front end, Supabase back end (Auth, Postgres with Row Level Secu
 View the app in AI Studio: https://ai.studio/apps/bf66685b-70da-42e0-aa33-d69bf3f6d9fd
 
 ## Run locally
-
+m
 **Prerequisites:** Node.js 20+
 
 1. Install dependencies: `npm install --legacy-peer-deps`
