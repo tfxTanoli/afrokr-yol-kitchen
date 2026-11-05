@@ -454,22 +454,24 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-md sm:max-w-lg bg-[#0B3B24] rounded-t-[32px] sm:rounded-[36px] shadow-2xl border border-emerald-900/40 overflow-hidden my-0 sm:my-6 text-slate-800 max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-md sm:max-w-lg bg-[#0B3B24] rounded-t-[32px] sm:rounded-[36px] shadow-2xl border border-emerald-900/40 overflow-y-auto overscroll-contain text-slate-800 max-h-[92dvh] sm:max-h-[min(90dvh,calc(100dvh_-_2rem))] flex flex-col">
         
         {/* ========================================================== */}
         {/* FOREST GREEN HEADER WITH GEOMETRIC MOTIFS & CENTERED AVATAR */}
         {/* Directly inspired by user_profil_f4e97a48.png               */}
         {/* ========================================================== */}
-        <div className="relative pt-4 sm:pt-5 pb-6 sm:pb-8 px-4 sm:px-6 overflow-hidden shrink-0">
-          {/* Geometric decorative background shapes */}
-          <div className="absolute top-2 left-6 w-14 h-14 rounded-full bg-emerald-600/20 pointer-events-none" />
-          <div className="absolute top-14 left-2 w-16 h-16 rounded-full bg-emerald-700/25 pointer-events-none" />
-          <div className="absolute -top-4 right-10 w-20 h-20 rounded-full bg-emerald-600/15 pointer-events-none" />
-          <div className="absolute top-16 right-4 w-12 h-12 rounded-tl-full bg-emerald-700/25 pointer-events-none" />
-          <div className="absolute bottom-6 right-8 w-16 h-16 rounded-full bg-emerald-600/20 pointer-events-none" />
+        <div className="relative pt-4 sm:pt-5 pb-6 sm:pb-8 [@media(max-height:640px)]:pt-3 [@media(max-height:640px)]:pb-5 px-4 sm:px-6 shrink-0">
+          {/* Geometric decorative background shapes (clipped on their own so the 3-dots menu is never cut) */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+            <div className="absolute top-2 left-6 w-14 h-14 rounded-full bg-emerald-600/20" />
+            <div className="absolute top-14 left-2 w-16 h-16 rounded-full bg-emerald-700/25" />
+            <div className="absolute -top-4 right-10 w-20 h-20 rounded-full bg-emerald-600/15" />
+            <div className="absolute top-16 right-4 w-12 h-12 rounded-tl-full bg-emerald-700/25" />
+            <div className="absolute bottom-6 right-8 w-16 h-16 rounded-full bg-emerald-600/20" />
+          </div>
 
           {/* Top Bar: Title "Profile" + 3-dots Menu + Close */}
-          <div className="relative z-30 flex items-center justify-between mb-4">
+          <div className="relative z-30 flex items-center justify-between mb-4 [@media(max-height:640px)]:mb-1">
             <h2 className="text-white font-serif font-black text-xl tracking-tight">
               Profile
             </h2>
@@ -563,8 +565,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           {/* Centered Avatar with Ring and Orange Pencil Edit Badge */}
           <div className="relative z-10 flex flex-col items-center text-center">
-            <div className="relative inline-block mb-3">
-              <div className="w-24 h-24 sm:w-26 sm:h-26 rounded-full ring-4 ring-emerald-400/50 overflow-hidden bg-emerald-950 shadow-xl">
+            <div className="relative inline-block mb-3 [@media(max-height:640px)]:mb-2">
+              <div className="w-24 h-24 sm:w-26 sm:h-26 [@media(max-height:640px)]:w-16 [@media(max-height:640px)]:h-16 rounded-full ring-4 ring-emerald-400/50 overflow-hidden bg-emerald-950 shadow-xl">
                 <img
                   src={currentUser.avatar}
                   alt={currentUser.name}
@@ -577,14 +579,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 type="button"
                 onClick={() => setActiveTab('profile')}
                 title="Modifier mes informations"
-                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#F97316] hover:bg-[#EA580C] text-white flex items-center justify-center shadow-lg ring-2 ring-[#0B3B24] transition-transform hover:scale-105 active:scale-90 cursor-pointer"
+                className="absolute bottom-0 right-0 w-8 h-8 [@media(max-height:640px)]:w-6 [@media(max-height:640px)]:h-6 rounded-full bg-[#F97316] hover:bg-[#EA580C] text-white flex items-center justify-center shadow-lg ring-2 ring-[#0B3B24] transition-transform hover:scale-105 active:scale-90 cursor-pointer"
               >
-                <Edit3 className="w-4 h-4" />
+                <Edit3 className="w-4 h-4 [@media(max-height:640px)]:w-3 [@media(max-height:640px)]:h-3" />
               </button>
             </div>
 
             {/* User Name in Bold White */}
-            <h3 className="font-serif font-black text-xl text-white tracking-tight leading-snug">
+            <h3 className="font-serif font-black text-xl [@media(max-height:640px)]:text-lg text-white tracking-tight leading-snug">
               {currentUser.name}
             </h3>
 
@@ -598,11 +600,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         {/* ========================================================== */}
         {/* WHITE CURVED BOTTOM SHEET: ACCOUNT OVERVIEW & SUB-VIEWS     */}
         {/* ========================================================== */}
-        <div className="rounded-t-[32px] sm:rounded-t-[36px] bg-white -mt-4 pt-5 sm:pt-6 pb-8 px-4 sm:px-6 shadow-2xl relative z-10 flex-1 overflow-y-auto overscroll-contain">
+        <div className="rounded-t-[32px] sm:rounded-t-[36px] bg-white -mt-4 pt-5 sm:pt-6 pb-8 px-4 sm:px-6 shadow-2xl relative z-10 flex-1">
           
           {/* When activeTab !== 'overview', show a clean back button to Account Overview */}
           {activeTab !== 'overview' && (
-            <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-100">
+            <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-2 -mt-2 bg-white flex items-center justify-between pb-3.5 mb-4 border-b border-slate-100">
               <button
                 type="button"
                 onClick={() => setActiveTab('overview')}
@@ -1383,7 +1385,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Tab: Feed de mes Recettes Publiées */}
         {activeTab === 'feed' && (
-          <div className="p-4 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-5">
             
             {/* Feed Header Banner */}
             <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-stone-900 to-[#0F3E2E] text-white border border-slate-700/60 shadow-lg space-y-3">
@@ -1668,7 +1670,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Tab 2: Order History & Driver Tips */}
         {showOrders && activeTab === 'orders' && (
-          <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+          <div className="p-6 space-y-6">
             
             {/* Header Hero Banner */}
             <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-[#0F3E2E] text-white border border-slate-700/60 shadow-lg space-y-3">
@@ -2398,7 +2400,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Tab: Following & Subscriptions */}
         {activeTab === 'following' && (
-          <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+          <div className="p-6 space-y-6">
             {/* Header Banner */}
             <div className="p-5 rounded-3xl bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border-2 border-orange-200/80 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
